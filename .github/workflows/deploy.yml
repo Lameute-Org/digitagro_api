@@ -20,4 +20,4 @@ jobs:
 
       - name: Deploy to  VPS
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "bash ~/deploy.sh"
+          ssh -o StrictHostKeyChecking=no digitagro@185.217.125.37 'bash -s' < deploy.sh
