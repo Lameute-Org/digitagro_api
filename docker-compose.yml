@@ -9,3 +9,5 @@ services:
     volumes:
       - .:/app
     restart: always
+    environment:
+      - DJANGO_ALLOWED_HOSTS=185.217.125.37,localhost,127.0.0.1
