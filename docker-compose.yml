@@ -1,13 +1,27 @@
 version: "3.9"
 
 services:
-  django_app:
+  digitagro_api:
     build: .
     container_name: digitagro_api
     ports:
       - "8001:8000"   # Port public VPS 8001 → interne 8000
     volumes:
-      - .:/app
+      - .:/app:cached
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
     restart: always
+    env_file:
+      - .env
     environment:
       - DJANGO_ALLOWED_HOSTS=185.217.125.37,localhost,127.0.0.1
+    networks:
+      - digitagro_network
+
+volumes:
+  static_volume:
+  media_volume:
+
+networks:
+  digitagro_network:
+    driver: bridge
