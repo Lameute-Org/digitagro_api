@@ -18,7 +18,8 @@ from django.db.models import Q
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
-
+from django.template.loader import render_to_string
+from django.core.mail import EmailMultiAlternatives
 from .models import CustomUser, PasswordResetRequest
 from .serializers import (
     UserRegistrationSerializer,
@@ -148,6 +149,7 @@ class CompleteProfileView(UpdateAPIView):
 
 
 @PASSWORD_RESET_REQUEST_SCHEMA
+@PASSWORD_RESET_REQUEST_SCHEMA
 class PasswordResetRequestView(CreateAPIView):
     """Demande de réinitialisation mot de passe"""
     serializer_class = PasswordResetRequestSerializer
@@ -172,20 +174,30 @@ class PasswordResetRequestView(CreateAPIView):
         # Créer la demande de reset
         reset_request = PasswordResetRequest.objects.create(user=user)
         
-        # Envoyer OTP par email
-        send_mail(
+        # Contexte pour le template
+        context = {
+            'user_name': user.get_full_name(),
+            'otp_code': reset_request.otp_code,
+            'reset_link': f"{settings.FRONTEND_URL}/reset-password?token={reset_request.reset_token}"
+        }
+        
+        # Rendu HTML
+        html_content = render_to_string('emails/password_reset_otp.html', context)
+        
+        # Envoi email avec HTML
+        email = EmailMultiAlternatives(
             subject='Code de réinitialisation DIGITAGRO',
-            message=f'Votre code de réinitialisation: {reset_request.otp_code}',
+            body=f'Votre code de réinitialisation: {reset_request.otp_code}',  # Fallback texte
             from_email=settings.EMAIL_HOST_USER,
-            recipient_list=[user.email],
-            fail_silently=True,
+            to=[user.email]
         )
+        email.attach_alternative(html_content, "text/html")
+        email.send(fail_silently=True)
         
         return Response(
             {'message': 'Code de réinitialisation envoyé'}, 
             status=status.HTTP_200_OK
         )
-
 
 @OTP_VERIFICATION_SCHEMA
 class OTPVerificationView(GenericAPIView):
