@@ -31,7 +31,11 @@ RUN python manage.py collectstatic --noinput
 COPY wait-for-postgres.sh /app/wait-for-postgres.sh
 RUN chmod +x /app/wait-for-postgres.sh
 
+# Copier le script entrypoint
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 EXPOSE 8000
 
-# Lancer les migrations et Uvicorn après que PostgreSQL soit prêt
-CMD [ "sh", "/app/wait-for-postgres.sh", "185.217.125.37", "python manage.py migrate --noinput && python manage.py collectstatic --noinput && uvicorn digitagro_api.asgi:application --host 0.0.0.0 --port 8000" ]
+# CMD final pour exécuter entrypoint
+CMD ["/app/entrypoint.sh"]
