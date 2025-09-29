@@ -38,4 +38,4 @@ RUN chmod +x /app/entrypoint.sh
 EXPOSE 8000
 
 # CMD final pour exécuter entrypoint
-CMD ["sh", "/app/entrypoint.sh"]
+CMD ["/app/entrypoint.sh"]

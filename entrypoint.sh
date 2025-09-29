@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 
-# Attendre PostgreSQL
-/app/wait-for-postgres.sh $DB_HOST true
+# Attendre PostgreSQL en utilisant sh
+sh /app/wait-for-postgres.sh $DB_HOST true
 
 echo "⏳ [DJANGO] Appliquer les migrations..."
 python manage.py migrate --noinput
