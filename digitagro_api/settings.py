@@ -134,11 +134,11 @@ REST_FRAMEWORK = {
 
 # Knox Configuration
 REST_KNOX = {
-    'SECURE_HASH_ALGORITHM': 'hashlib.sha512',
+    # 'SECURE_HASH_ALGORITHM': 'hashlib.sha512',  # Retirer cette ligne
     'AUTH_TOKEN_CHARACTER_LENGTH': 64,
-    'TOKEN_TTL': None,  # Pas d'expiration automatique
+    'TOKEN_TTL': None,
     'USER_SERIALIZER': 'apps.users.serializers.UserProfileSerializer',
-    'TOKEN_LIMIT_PER_USER': 10,  # Limite de tokens par utilisateur
+    'TOKEN_LIMIT_PER_USER': 10,
     'AUTO_REFRESH': False,
 }
 
