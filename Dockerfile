@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Installer dépendances système
+# Installer dépendances système et client PostgreSQL
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
@@ -33,5 +33,5 @@ RUN chmod +x /app/wait-for-postgres.sh
 
 EXPOSE 8000
 
-# Lancer Django après que PostgreSQL soit prêt
-CMD ["/app/wait-for-postgres.sh", "DB_HOST", "python", "manage.py", "migrate", "--noinput", "&&", "uvicorn", "digitagro_api.asgi:application", "--host", "0.0.0.0", "--port", "8000"]
+# Lancer les migrations et Uvicorn après que PostgreSQL soit prêt
+CMD [ "sh", "/app/wait-for-postgres.sh", "185.217.125.37", "python manage.py migrate --noinput && python manage.py collectstatic --noinput && uvicorn digitagro_api.asgi:application --host 0.0.0.0 --port 8000" ]
