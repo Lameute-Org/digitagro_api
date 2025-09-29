@@ -11,8 +11,10 @@ echo "📥 [GIT] Pull des dernières modifications..."
 git fetch origin main
 git reset --hard origin/main
 
+echo "🐳 [DOCKER] Suppression des anciens conteneurs si existants..."
+docker ps -a -q --filter "name=digitagro_api" | xargs -r docker rm -f
+
 echo "🐳 [DOCKER] Reconstruction et relance..."
-docker-compose down
 docker-compose up -d --build
 
 echo "⏳ [DOCKER] Attente du démarrage du conteneur..."
