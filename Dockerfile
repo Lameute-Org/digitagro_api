@@ -1,10 +1,8 @@
-# Image de base Python
 FROM python:3.12-slim
 
-# Définir le répertoire de travail
 WORKDIR /app
 
-# Installer dépendances système pour PostgreSQL et images
+# Installer dépendances système
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
@@ -15,7 +13,7 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copier et installer les dépendances Python avec timeout étendu
+# Copier et installer les dépendances Python
 COPY requirements.txt .
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir --timeout=1000 --retries=5 -r requirements.txt
@@ -23,14 +21,17 @@ RUN pip install --no-cache-dir --timeout=1000 --retries=5 -r requirements.txt
 # Copier le code Django
 COPY . .
 
-# Créer les répertoires pour les fichiers statiques et media
+# Créer les répertoires statiques et media
 RUN mkdir -p /app/staticfiles /app/media
 
 # Collecter les fichiers statiques
 RUN python manage.py collectstatic --noinput
 
-# Exposer le port interne
+# Copier le script wait-for-postgres
+COPY wait-for-postgres.sh /app/wait-for-postgres.sh
+RUN chmod +x /app/wait-for-postgres.sh
+
 EXPOSE 8000
 
-# Commande de démarrage avec Uvicorn (ASGI pour WebSockets futures)
-CMD ["uvicorn", "digitagro_api.asgi:application", "--host", "0.0.0.0", "--port", "8000"]
+# Lancer Django après que PostgreSQL soit prêt
+CMD ["/app/wait-for-postgres.sh", "DB_HOST", "python", "manage.py", "migrate", "--noinput", "&&", "uvicorn", "digitagro_api.asgi:application", "--host", "0.0.0.0", "--port", "8000"]

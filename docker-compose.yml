@@ -5,7 +5,7 @@ services:
     build: .
     container_name: digitagro_api
     ports:
-      - "8001:8000"   # Port public VPS 8001 → interne 8000
+      - "8001:8000"
     volumes:
       - .:/app:cached
       - static_volume:/app/staticfiles
@@ -15,6 +15,11 @@ services:
       - .env
     environment:
       - DJANGO_ALLOWED_HOSTS=185.217.125.37,localhost,127.0.0.1
+      - DB_HOST=185.217.125.37
+      - DB_PORT=5432
+      - DB_NAME=digitagro_db
+      - DB_USER=digitagro
+      - DB_PASSWORD=Digitagro@2002
     networks:
       - digitagro_network
 
