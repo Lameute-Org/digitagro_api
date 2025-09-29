@@ -1,7 +1,6 @@
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
+from drf_spectacular.utils import extend_schema, OpenApiExample
 from drf_spectacular.openapi import AutoSchema
 from rest_framework import status
-from rest_framework.serializers import CharField
 
 # ==================== CONSTANTES ====================
 
@@ -20,6 +19,18 @@ MSG_USER_CREATED = 'Utilisateur créé avec succès'
 MSG_INVALID_DATA = 'Données invalides'
 MSG_INVALID_CREDENTIALS = 'Identifiants invalides'
 MSG_UNAUTHORIZED = 'Non authentifié'
+
+# Tags réutilisables
+TAG_AUTH = 'Authentication'
+TAG_PROFILE = 'Profile'
+TAG_PASSWORD_RESET = 'Password Reset'
+TAG_SOCIAL_AUTH = 'Social Authentication'
+
+# Descriptions réutilisables
+DESC_PROFILE_COMPLETED = 'État de complétion du profil'
+DESC_TOKEN_KNOX = 'Token Knox 64 caractères'
+DESC_DATE_EXPIRY = "Date d'expiration du token"
+DESC_USER_PROFILE = "Profil complet de l'utilisateur connecté"
 
 # ==================== SCHÉMAS DE RÉPONSE ====================
 
@@ -47,7 +58,7 @@ USER_REGISTRATION_SCHEMA = extend_schema(
         },
         400: {'description': MSG_INVALID_DATA}
     },
-    tags=['Authentication']
+    tags=[TAG_AUTH]
 )
 
 TOKEN_OBTAIN_SCHEMA = extend_schema(
@@ -55,7 +66,7 @@ TOKEN_OBTAIN_SCHEMA = extend_schema(
     summary="Connexion utilisateur",
     description="Authentification via email ou téléphone avec génération de token Knox.",
     request={
-        'application/json': {
+        CONTENT_TYPE_JSON: {
             'type': 'object',
             'properties': {
                 'identifier': {'type': 'string', 'description': 'Email ou numéro de téléphone'},
@@ -68,28 +79,28 @@ TOKEN_OBTAIN_SCHEMA = extend_schema(
         200: {
             'description': 'Connexion réussie - Token Knox généré',
             'content': {
-                'application/json': {
+                CONTENT_TYPE_JSON: {
                     'schema': {
                         'type': 'object',
                         'properties': {
                             'token': {
                                 'type': 'string',
-                                'description': 'Token Knox 64 caractères',
-                                'example': '9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b'
+                                'description': DESC_TOKEN_KNOX,
+                                'example': EXAMPLE_TOKEN
                             },
                             'expiry': {
                                 'type': 'string',
                                 'format': 'date-time',
-                                'description': 'Date d’expiration du token',
-                                'example': '2024-12-31T23:59:59.999999Z'
+                                'description': DESC_DATE_EXPIRY,
+                                'example': EXAMPLE_EXPIRY
                             },
                             'user': {
                                 'type': 'object',
-                                'description': 'Profil complet de l’utilisateur connecté',
+                                'description': DESC_USER_PROFILE,
                                 'properties': {
                                     'id': {'type': 'integer', 'example': 1},
-                                    'email': {'type': 'string', 'example': 'user@example.com'},
-                                    'telephone': {'type': 'string', 'example': '+237123456789'},
+                                    'email': {'type': 'string', 'example': EXAMPLE_EMAIL},
+                                    'telephone': {'type': 'string', 'example': EXAMPLE_PHONE},
                                     'nom': {'type': 'string', 'example': 'Jean'},
                                     'prenom': {'type': 'string', 'example': 'Dupont'},
                                     'adresse': {'type': 'string', 'example': 'Yaoundé'},
@@ -116,15 +127,15 @@ TOKEN_OBTAIN_SCHEMA = extend_schema(
             }
         },
         400: {
-            'description': 'Identifiants invalides',
+            'description': MSG_INVALID_CREDENTIALS,
             'content': {
-                'application/json': {
-                    'example': {"non_field_errors": ["Identifiants invalides"]}
+                CONTENT_TYPE_JSON: {
+                    'example': {"non_field_errors": [MSG_INVALID_CREDENTIALS]}
                 }
             }
         }
     },
-    tags=['Authentication']
+    tags=[TAG_AUTH]
 )
 
 LOGOUT_SCHEMA = extend_schema(
@@ -133,9 +144,9 @@ LOGOUT_SCHEMA = extend_schema(
     description="Révoque le token d'authentification actuel",
     responses={
         204: {'description': 'Déconnexion réussie'},
-        401: {'description': 'Non authentifié'}
+        401: {'description': MSG_UNAUTHORIZED}
     },
-    tags=['Authentication']
+    tags=[TAG_AUTH]
 )
 
 LOGOUT_ALL_SCHEMA = extend_schema(
@@ -144,9 +155,9 @@ LOGOUT_ALL_SCHEMA = extend_schema(
     description="Révoque tous les tokens de l'utilisateur",
     responses={
         204: {'description': 'Déconnexion de tous les appareils réussie'},
-        401: {'description': 'Non authentifié'}
+        401: {'description': MSG_UNAUTHORIZED}
     },
-    tags=['Authentication']
+    tags=[TAG_AUTH]
 )
 
 USER_PROFILE_GET_SCHEMA = extend_schema(
@@ -164,11 +175,11 @@ USER_PROFILE_GET_SCHEMA = extend_schema(
         200: {
             'description': 'Profil récupéré avec succès',
             'content': {
-                'application/json': {
+                CONTENT_TYPE_JSON: {
                     'example': {
                         'id': 1,
                         'email': 'producteur@example.com',
-                        'telephone': '+237123456789',
+                        'telephone': EXAMPLE_PHONE,
                         'nom': 'Dupont',
                         'prenom': 'Jean',
                         'adresse': 'Yaoundé, Cameroun',
@@ -187,15 +198,15 @@ USER_PROFILE_GET_SCHEMA = extend_schema(
             }
         },
         401: {
-            'description': 'Non authentifié',
+            'description': MSG_UNAUTHORIZED,
             'content': {
-                'application/json': {
-                    'example': {'detail': 'Informations d\'authentification non fournies.'}
+                CONTENT_TYPE_JSON: {
+                    'example': {'detail': "Informations d'authentification non fournies."}
                 }
             }
         }
     },
-    tags=['Profile']
+    tags=[TAG_PROFILE]
 )
 
 USER_PROFILE_UPDATE_SCHEMA = extend_schema(
@@ -203,7 +214,7 @@ USER_PROFILE_UPDATE_SCHEMA = extend_schema(
     summary="Mettre à jour profil",
     description="Modification partielle des informations du profil utilisateur",
     request={
-        'multipart/form-data': {
+        CONTENT_TYPE_MULTIPART: {
             'type': 'object',
             'properties': {
                 'telephone': {'type': 'string'},
@@ -215,14 +226,10 @@ USER_PROFILE_UPDATE_SCHEMA = extend_schema(
         }
     },
     responses={
-        200: {
-            'description': 'Profil mis à jour avec succès'
-        },
-        400: {
-            'description': 'Données invalides'
-        }
+        200: {'description': 'Profil mis à jour avec succès'},
+        400: {'description': MSG_INVALID_DATA}
     },
-    tags=['Profile']
+    tags=[TAG_PROFILE]
 )
 
 COMPLETE_PROFILE_SCHEMA = extend_schema(
@@ -233,7 +240,7 @@ COMPLETE_PROFILE_SCHEMA = extend_schema(
     Marque automatiquement le profil comme complété.
     """,
     request={
-        'multipart/form-data': {
+        CONTENT_TYPE_MULTIPART: {
             'type': 'object',
             'properties': {
                 'telephone': {'type': 'string', 'description': 'Requis si manquant'},
@@ -246,18 +253,18 @@ COMPLETE_PROFILE_SCHEMA = extend_schema(
         200: {
             'description': 'Profil complété avec succès',
             'content': {
-                'application/json': {
+                CONTENT_TYPE_JSON: {
                     'example': {
                         'id': 1,
                         'profile_completed': True,
-                        'telephone': '+237123456789',
+                        'telephone': EXAMPLE_PHONE,
                         'adresse': 'Yaoundé, Cameroun'
                     }
                 }
             }
         }
     },
-    tags=['Profile']
+    tags=[TAG_PROFILE]
 )
 
 PASSWORD_RESET_REQUEST_SCHEMA = extend_schema(
@@ -273,12 +280,12 @@ PASSWORD_RESET_REQUEST_SCHEMA = extend_schema(
     4. Expiration automatique après 5 minutes
     """,
     request={
-        'application/json': {
+        CONTENT_TYPE_JSON: {
             'type': 'object',
             'properties': {
                 'identifier': {
                     'type': 'string',
-                    'description': 'Email ou téléphone de l\'utilisateur'
+                    'description': "Email ou téléphone de l'utilisateur"
                 }
             },
             'required': ['identifier']
@@ -287,24 +294,24 @@ PASSWORD_RESET_REQUEST_SCHEMA = extend_schema(
     examples=[
         OpenApiExample(
             name='Reset par email',
-            value={'identifier': 'user@example.com'}
+            value={'identifier': EXAMPLE_EMAIL}
         ),
         OpenApiExample(
             name='Reset par téléphone',
-            value={'identifier': '+237123456789'}
+            value={'identifier': EXAMPLE_PHONE}
         )
     ],
     responses={
         200: {
             'description': 'Code de réinitialisation envoyé',
             'content': {
-                'application/json': {
+                CONTENT_TYPE_JSON: {
                     'example': {'message': 'Code de réinitialisation envoyé'}
                 }
             }
         }
     },
-    tags=['Password Reset']
+    tags=[TAG_PASSWORD_RESET]
 )
 
 OTP_VERIFICATION_SCHEMA = extend_schema(
@@ -312,7 +319,7 @@ OTP_VERIFICATION_SCHEMA = extend_schema(
     summary="Vérifier code OTP",
     description="Valide le code à 6 chiffres reçu par email et retourne le token de reset",
     request={
-        'application/json': {
+        CONTENT_TYPE_JSON: {
             'type': 'object',
             'properties': {
                 'email': {'type': 'string', 'format': 'email'},
@@ -325,7 +332,7 @@ OTP_VERIFICATION_SCHEMA = extend_schema(
         200: {
             'description': 'Code validé avec succès',
             'content': {
-                'application/json': {
+                CONTENT_TYPE_JSON: {
                     'example': {
                         'message': 'Code validé',
                         'reset_token': 'secure_reset_token_string'
@@ -333,11 +340,9 @@ OTP_VERIFICATION_SCHEMA = extend_schema(
                 }
             }
         },
-        400: {
-            'description': 'Code invalide ou expiré'
-        }
+        400: {'description': 'Code invalide ou expiré'}
     },
-    tags=['Password Reset']
+    tags=[TAG_PASSWORD_RESET]
 )
 
 TOKEN_VALIDATION_SCHEMA = extend_schema(
@@ -345,7 +350,7 @@ TOKEN_VALIDATION_SCHEMA = extend_schema(
     summary="Valider token reset",
     description="Vérifie la validité du lien de réinitialisation cryptographique",
     request={
-        'application/json': {
+        CONTENT_TYPE_JSON: {
             'type': 'object',
             'properties': {
                 'reset_token': {'type': 'string'}
@@ -357,16 +362,14 @@ TOKEN_VALIDATION_SCHEMA = extend_schema(
         200: {
             'description': 'Token valide',
             'content': {
-                'application/json': {
+                CONTENT_TYPE_JSON: {
                     'example': {'message': 'Token valide'}
                 }
             }
         },
-        400: {
-            'description': 'Token invalide ou expiré'
-        }
+        400: {'description': 'Token invalide ou expiré'}
     },
-    tags=['Password Reset']
+    tags=[TAG_PASSWORD_RESET]
 )
 
 PASSWORD_RESET_CONFIRM_SCHEMA = extend_schema(
@@ -377,7 +380,7 @@ PASSWORD_RESET_CONFIRM_SCHEMA = extend_schema(
     Supprime automatiquement la demande de reset après succès.
     """,
     request={
-        'application/json': {
+        CONTENT_TYPE_JSON: {
             'type': 'object',
             'properties': {
                 'reset_token': {'type': 'string'},
@@ -391,16 +394,14 @@ PASSWORD_RESET_CONFIRM_SCHEMA = extend_schema(
         200: {
             'description': 'Mot de passe réinitialisé avec succès',
             'content': {
-                'application/json': {
+                CONTENT_TYPE_JSON: {
                     'example': {'message': 'Mot de passe réinitialisé avec succès'}
                 }
             }
         },
-        400: {
-            'description': 'Token invalide ou mots de passe non correspondants'
-        }
+        400: {'description': 'Token invalide ou mots de passe non correspondants'}
     },
-    tags=['Password Reset']
+    tags=[TAG_PASSWORD_RESET]
 )
 
 GOOGLE_AUTH_SCHEMA = extend_schema(
@@ -416,27 +417,21 @@ GOOGLE_AUTH_SCHEMA = extend_schema(
     4. Génération du token Knox
     """,
     request={
-        'application/json': {
+        CONTENT_TYPE_JSON: {
             'type': 'object',
             'properties': {
                 'access_token': {
                     'type': 'string',
-                    'description': 'Token d\'accès Google obtenu côté frontend'
+                    'description': "Token d'accès Google obtenu côté frontend"
                 }
             },
             'required': ['access_token']
         }
     },
     responses={
-        200: {
-            'description': 'Connexion Google réussie'
-        },
-        400: {
-            'description': 'Token Google invalide'
-        },
-        501: {
-            'description': 'Fonctionnalité en développement'
-        }
+        200: {'description': 'Connexion Google réussie'},
+        400: {'description': 'Token Google invalide'},
+        501: {'description': 'Fonctionnalité en développement'}
     },
-    tags=['Social Authentication']
+    tags=[TAG_SOCIAL_AUTH]
 )

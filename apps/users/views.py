@@ -7,7 +7,11 @@ from rest_framework.generics import (
     UpdateAPIView,
     GenericAPIView
 )
-from knox.views import LoginView as KnoxLoginView
+from knox.views import (
+    LoginView as KnoxLoginView,
+    LogoutView as KnoxLogoutView,
+    LogoutAllView as KnoxLogoutAllView
+)
 from knox.models import AuthToken
 from django.contrib.auth import authenticate, login
 from django.db.models import Q
@@ -31,6 +35,8 @@ from .permissions import IsProfileCompleted, IsOwnerOrReadOnly
 
 # Import de la documentation Swagger
 from .docs.users_swagger import (
+    LOGOUT_ALL_SCHEMA,
+    LOGOUT_SCHEMA,
     USER_REGISTRATION_SCHEMA,
     TOKEN_OBTAIN_SCHEMA,
     USER_PROFILE_GET_SCHEMA,
@@ -42,6 +48,26 @@ from .docs.users_swagger import (
     PASSWORD_RESET_CONFIRM_SCHEMA,
     GOOGLE_AUTH_SCHEMA
 )
+
+# views.py
+@LOGOUT_SCHEMA
+class CustomLogoutView(KnoxLogoutView):
+    """Déconnexion utilisateur - Révoque le token actuel"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        # Knox supprime automatiquement le token de la DB
+        return super().post(request, format)
+
+
+@LOGOUT_ALL_SCHEMA
+class CustomLogoutAllView(KnoxLogoutAllView):
+    """Déconnexion de tous les appareils - Révoque tous les tokens"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        # Knox supprime tous les tokens de l'utilisateur
+        return super().post(request, format)
 
 
 @USER_REGISTRATION_SCHEMA
