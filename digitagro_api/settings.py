@@ -45,7 +45,7 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
-# Application definition
+# Application definition,
 DJANGO_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
