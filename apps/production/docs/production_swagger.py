@@ -1,5 +1,5 @@
 # apps/production/docs/production_swagger.py
-from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from rest_framework import status
 
 TAG_PRODUCTION = 'Productions'
@@ -13,7 +13,6 @@ LIST_PRODUCTIONS_SCHEMA = extend_schema(
     operation_id="list_productions",
     summary="Liste des productions",
     description="Productions disponibles avec pagination",
-    auth=['TokenAuth'],
     responses={
         200: {
             'description': 'Liste paginée',
@@ -51,7 +50,6 @@ CREATE_PRODUCTION_SCHEMA = extend_schema(
     operation_id="create_production",
     summary="Créer production",
     description="Déclarer une nouvelle production (Producteur uniquement)",
-    auth=['TokenAuth'],
     request={
         'multipart/form-data': {
             'type': 'object',
@@ -84,7 +82,6 @@ NEARBY_PRODUCTIONS_SCHEMA = extend_schema(
     operation_id="nearby_productions",
     summary="Productions à proximité",
     description="Recherche par rayon GPS (défaut: 10km)",
-    auth=['TokenAuth'],
     parameters=[
         OpenApiParameter('lat', float, description='Latitude', required=True),
         OpenApiParameter('lon', float, description='Longitude', required=True),
@@ -101,7 +98,6 @@ UPLOAD_PHOTO_SCHEMA = extend_schema(
     operation_id="upload_production_photo",
     summary="Ajouter photo",
     description="Upload photo production (max 5 par production)",
-    auth=['TokenAuth'],
     request={
         'multipart/form-data': {
             'type': 'object',
@@ -123,7 +119,6 @@ SEARCH_PRODUCTIONS_SCHEMA = extend_schema(
     operation_id="search_productions",
     summary="Recherche Elasticsearch",
     description="Recherche avancée avec filtres",
-    auth=['TokenAuth'],
     parameters=[
         OpenApiParameter('search', str, description='Terme recherche'),
         OpenApiParameter('type_production', str, description='Type production'),
@@ -141,7 +136,6 @@ LIST_COMMANDES_SCHEMA = extend_schema(
     operation_id="list_commandes",
     summary="Mes commandes",
     description="Liste commandes (client) ou reçues (producteur)",
-    auth=['TokenAuth'],
     responses={
         200: {
             'description': 'Liste commandes',
@@ -173,7 +167,6 @@ CREATE_COMMANDE_SCHEMA = extend_schema(
     operation_id="create_commande",
     summary="Passer commande",
     description="Créer commande sur une production",
-    auth=['TokenAuth'],
     request={
         'application/json': {
             'type': 'object',
@@ -198,7 +191,6 @@ CONFIRM_COMMANDE_SCHEMA = extend_schema(
     operation_id="confirm_commande",
     summary="Confirmer commande",
     description="Producteur confirme la commande",
-    
     responses={
         200: {'description': 'Commande confirmée - Notification client'},
         403: {'description': 'Producteur uniquement'}
