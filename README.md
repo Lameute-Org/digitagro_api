@@ -147,6 +147,59 @@ digitagro_api/
 
 ---
 
+### 🔔 Module Notifications (100%)
+
+#### WebSocket Temps Réel
+- **URL**: `ws://185.217.125.37:8001/ws/notifications/?token={knox_token}`
+- **Authentification**: Token Knox en query string
+- **Auto-envoi**: Liste des notifications non lues à la connexion
+
+#### Endpoints API
+
+| Méthode | Endpoint | Description | Auth |
+|---------|----------|-------------|------|
+| GET | `/api/notifications/` | Liste toutes notifications | Token |
+| GET | `/api/notifications/unread/` | Notifications non lues (50 max) | Token |
+| POST | `/api/notifications/{id}/mark_read/` | Marquer comme lue | Token |
+| POST | `/api/notifications/mark_all_read/` | Tout marquer comme lu | Token |
+| DELETE | `/api/notifications/clear_all/` | Supprimer toutes | Token |
+
+#### Types de Notifications (30 types)
+
+**Producteur**: `new_order`, `payment_received`, `product_shipped`, `new_review`, `transformation_request`, `transformation_completed`, `transport_started`, `delivery_completed`, `bulk_order`
+
+**Transporteur**: `transport_request`, `transport_confirmed`, `transport_started`, `delivery_completed`, `new_review`
+
+**Transformateur**: `transformation_request`, `payment_received`, `products_ready`, `transformation_completed`, `new_review`
+
+**Distributeur**: `order_confirmed`, `payment_received`, `product_shipped`, `stock_updated`, `new_order`
+
+**Consommateur**: `new_order`, `order_confirmed`, `payment_received`, `product_shipped`, `delivery_completed`, `transport_confirmed`, `transport_arrived`
+
+**Transversal**: `new_message`, `new_device`, `password_changed`, `profile_incomplete`, `delivery_delayed`, `order_cancelled`, `refund_requested`
+
+#### Utilisation Backend
+```python
+from apps.notifications.services import NotificationService
+
+# Producteur - nouvelle commande
+NotificationService.notify_producteur_new_order(commande)
+
+# Transporteur - demande
+NotificationService.notify_transporteur_new_request(reservation)
+
+# Consommateur - livraison
+NotificationService.notify_consommateur_delivery_completed(livraison)
+
+# Système - profil incomplet
+NotificationService.notify_profile_incomplete(user)
+
+# Anomalie - retard
+NotificationService.notify_delivery_delayed(livraison, delay_minutes=30)
+```
+
+---
+
 ## 🚀 Installation & Déploiement
 
 ### Prérequis

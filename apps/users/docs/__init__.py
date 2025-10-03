@@ -53,37 +53,3 @@ def force_login_response():
         tags=['Authentication']
     )
 
-# Décorateur pour forcer la réponse REGISTER  
-def force_register_response():
-    return extend_schema(
-        operation_id="user_registration",
-        summary="Inscription utilisateur avec rôle",
-        description="Créer compte + rôle spécifique - retourne token Knox",
-        responses={
-            201: {
-                'description': 'Utilisateur créé avec succès',
-                'content': {
-                    'application/json': {
-                        'schema': {
-                            'type': 'object',
-                            'properties': {
-                                'user': {'type': 'object', 'description': 'Profil utilisateur complet'},
-                                'token': {
-                                    'type': 'string',
-                                    'example': '9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b'
-                                },
-                                'expiry': {
-                                    'type': 'string',
-                                    'format': 'date-time',
-                                    'example': '2024-12-31T23:59:59.999999Z'
-                                }
-                            },
-                            'required': ['user', 'token', 'expiry']
-                        }
-                    }
-                }
-            },
-            400: {'description': 'Données invalides'}
-        },
-        tags=['Authentication']
-    )

@@ -23,6 +23,9 @@ urlpatterns = [
     # API Endpoints
     path('api/auth/', include('apps.users.urls')),
     path('api/users/', include('apps.users.urls')),
+    path('api/notifications/', include('apps.notifications.urls')),
+    path('api/production/', include('apps.production.urls')),
+
     
     # Social Auth
     path('auth/', include('social_django.urls', namespace='social')),

@@ -53,6 +53,8 @@ DJANGO_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_elasticsearch_dsl',
+
 ]
 
 THIRD_PARTY_APPS = [
@@ -61,13 +63,23 @@ THIRD_PARTY_APPS = [
     'social_django',
     'drf_spectacular',
     'corsheaders',
+    'channels',
 ]
 
 LOCAL_APPS = [
     'apps.users',
+    'apps.notifications',
+    'apps.production',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {"hosts": [('127.0.0.1', 6379)]},
+    },
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -115,6 +127,45 @@ DATABASES = {
         'PORT': env('DB_PORT', default='5432'),
     }
 }
+
+
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'DigitAgro API',
+    'DESCRIPTION': 'Documentation de l’API DigitAgro',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+
+    'SECURITY': [
+        {'TokenAuth': []},
+    ],
+
+    'COMPONENTS': {
+        'securitySchemes': {
+            'TokenAuth': {
+                'type': 'apiKey',
+                'in': 'header',
+                'name': 'Authorization',
+                'description': 'Authentification avec Knox. Exemple: Token 1234567890abcdef'
+            }
+        }
+    },
+}
+
+
+# Elasticsearch
+if DEBUG:
+    ELASTICSEARCH_DSL = {
+        'default': {
+            'hosts': 'http://localhost:9200'
+        },
+    }
+else:
+    ELASTICSEARCH_DSL = {
+        'default': {
+            'hosts': 'http://185.217.125.37:9200'
+        },
+    }
 
 # Custom User Model
 AUTH_USER_MODEL = 'users.CustomUser'
