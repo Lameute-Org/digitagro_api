@@ -53,12 +53,6 @@ class ProductionViewSet(viewsets.ModelViewSet):
         serializer.save(producteur=self.request.user.producteur)
     
     @LIST_PRODUCTIONS_SCHEMA
-    @extend_schema(
-        summary="Lister mes commandes",
-        description="Liste des commandes pour le client ou le producteur connecté",
-        tags=["Commandes"],
-        auth=['TokenAuth']  # 🔑 ici on dit explicitement que ça nécessite un Token
-    )
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
     

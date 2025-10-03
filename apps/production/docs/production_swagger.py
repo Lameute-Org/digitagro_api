@@ -1,5 +1,5 @@
 # apps/production/docs/production_swagger.py
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework import status
 
 TAG_PRODUCTION = 'Productions'
