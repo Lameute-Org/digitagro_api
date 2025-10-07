@@ -1,5 +1,4 @@
-from django.urls import path, include
-from knox import views as knox_views
+from django.urls import path
 from .views import (
     CustomLogoutAllView,
     CustomLogoutView,
@@ -7,6 +6,8 @@ from .views import (
     CustomLoginView,
     UserProfileView,
     CompleteProfileView,
+    RoleActivationView,
+    UserRolesStatusView,
     PasswordResetRequestView,
     OTPVerificationView,
     TokenValidationView,
@@ -15,7 +16,7 @@ from .views import (
 )
 
 urlpatterns = [
-    # Authentification Knox
+    # Authentification
     path('register/', UserRegistrationView.as_view(), name='user-register'),
     path('login/', CustomLoginView.as_view(), name='knox-login'),
     path('logout/', CustomLogoutView.as_view(), name='logout'),
@@ -24,6 +25,10 @@ urlpatterns = [
     # Profil utilisateur
     path('me/', UserProfileView.as_view(), name='user-profile'),
     path('me/complete-profile/', CompleteProfileView.as_view(), name='complete-profile'),
+    
+    # Gestion des rôles
+    path('activate-role/', RoleActivationView.as_view(), name='activate-role'),
+    path('roles-status/', UserRolesStatusView.as_view(), name='roles-status'),
     
     # Reset password
     path('password/request-reset/', PasswordResetRequestView.as_view(), name='password-request-reset'),

@@ -435,3 +435,307 @@ GOOGLE_AUTH_SCHEMA = extend_schema(
     },
     tags=[TAG_SOCIAL_AUTH]
 )
+# ==================== DOCUMENTATION SCHEMAS ====================
+
+USER_REGISTRATION_SCHEMA = extend_schema(
+    operation_id="user_registration",
+    summary="Inscription utilisateur",
+    description="Créer un nouveau compte. Tous les utilisateurs sont consommateurs par défaut. Les rôles professionnels s'activent à la demande.",
+    responses={
+        201: {
+            'description': 'Utilisateur créé avec succès',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'user': {
+                            'id': 1,
+                            'email': 'user@example.com',
+                            'is_consommateur': True,
+                            'is_producteur': False,
+                            'is_transporteur': False,
+                            'is_transformateur': False,
+                            'is_distributeur': False,
+                            'profile_completed': False,
+                            'active_roles': ['consommateur']
+                        },
+                        'token': '9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b',
+                        'expiry': '2024-12-31T23:59:59.999999Z'
+                    }
+                }
+            }
+        },
+        400: {'description': 'Données invalides'}
+    },
+    tags=['Authentication']
+)
+
+LOGIN_SCHEMA = extend_schema(
+    operation_id="user_login",
+    summary="Connexion utilisateur",
+    description="Authentification via email ou téléphone",
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'identifier': {'type': 'string', 'description': 'Email ou téléphone'},
+                'password': {'type': 'string', 'description': 'Mot de passe'}
+            },
+            'required': ['identifier', 'password']
+        }
+    },
+    responses={
+        200: {
+            'description': 'Connexion réussie',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'token': '9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b',
+                        'expiry': '2024-12-31T23:59:59.999999Z',
+                        'user': {
+                            'id': 1,
+                            'email': 'user@example.com',
+                            'active_roles': ['consommateur', 'producteur'],
+                            'role_profiles': {
+                                'producteur': {
+                                    'type_production': 'Maraîchage',
+                                    'superficie': '2.50'
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        400: {'description': 'Identifiants invalides'}
+    },
+    tags=['Authentication']
+)
+
+LOGOUT_SCHEMA = extend_schema(
+    operation_id="user_logout",
+    summary="Déconnexion",
+    description="Révoque le token actuel",
+    responses={
+        204: {'description': 'Déconnexion réussie'},
+        401: {'description': 'Non authentifié'}
+    },
+    tags=['Authentication']
+)
+
+LOGOUT_ALL_SCHEMA = extend_schema(
+    operation_id="user_logout_all",
+    summary="Déconnexion tous appareils",
+    description="Révoque tous les tokens de l'utilisateur",
+    responses={
+        204: {'description': 'Déconnexion réussie'},
+        401: {'description': 'Non authentifié'}
+    },
+    tags=['Authentication']
+)
+
+USER_PROFILE_GET_SCHEMA = extend_schema(
+    operation_id="get_user_profile",
+    summary="Consulter profil",
+    description="Récupère le profil complet avec tous les rôles actifs",
+    responses={
+        200: {
+            'description': 'Profil récupéré',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'id': 1,
+                        'email': 'user@example.com',
+                        'telephone': '+237123456789',
+                        'is_consommateur': True,
+                        'is_producteur': True,
+                        'is_transporteur': False,
+                        'is_producteur_verified': False,
+                        'active_roles': ['consommateur', 'producteur'],
+                        'role_profiles': {
+                            'producteur': {
+                                'type_production': 'Maraîchage',
+                                'superficie': '2.50',
+                                'total_productions': 5
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    tags=['Profile']
+)
+
+USER_PROFILE_UPDATE_SCHEMA = extend_schema(
+    operation_id="update_user_profile",
+    summary="Mettre à jour profil",
+    description="Modification des informations personnelles",
+    request={
+        'multipart/form-data': {
+            'type': 'object',
+            'properties': {
+                'telephone': {'type': 'string'},
+                'nom': {'type': 'string'},
+                'prenom': {'type': 'string'},
+                'adresse': {'type': 'string'},
+                'avatar': {'type': 'string', 'format': 'binary'}
+            }
+        }
+    },
+    responses={
+        200: {'description': 'Profil mis à jour'},
+        400: {'description': 'Données invalides'}
+    },
+    tags=['Profile']
+)
+
+COMPLETE_PROFILE_SCHEMA = extend_schema(
+    operation_id="complete_profile",
+    summary="Compléter profil",
+    description="Complète les informations manquantes du profil",
+    responses={
+        200: {'description': 'Profil complété'},
+        400: {'description': 'Données invalides'}
+    },
+    tags=['Profile']
+)
+
+ROLE_ACTIVATION_SCHEMA = extend_schema(
+    operation_id="activate_role",
+    summary="Activer un rôle professionnel",
+    description="Active un rôle (producteur, transporteur, etc.) avec les informations requises",
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'role': {
+                    'type': 'string',
+                    'enum': ['producteur', 'transporteur', 'transformateur', 'distributeur'],
+                    'description': 'Rôle à activer'
+                },
+                'type_production': {'type': 'string', 'description': 'Requis pour producteur'},
+                'superficie': {'type': 'number', 'description': 'Optionnel pour producteur'},
+                'type_vehicule': {'type': 'string', 'description': 'Requis pour transporteur'},
+                'capacite': {'type': 'number', 'description': 'Requis pour transporteur'},
+                'type_transformation': {'type': 'string', 'description': 'Requis pour transformateur'},
+                'type_distribution': {'type': 'string', 'description': 'Requis pour distributeur'}
+            },
+            'required': ['role']
+        }
+    },
+    examples=[
+        OpenApiExample(
+            name='Activer producteur',
+            value={'role': 'producteur', 'type_production': 'Maraîchage', 'superficie': 2.5}
+        ),
+        OpenApiExample(
+            name='Activer transporteur',
+            value={'role': 'transporteur', 'type_vehicule': 'Camion', 'capacite': 5.0}
+        )
+    ],
+    responses={
+        200: {
+            'description': 'Rôle activé avec succès',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'message': 'Rôle producteur activé avec succès',
+                        'user': {
+                            'id': 1,
+                            'is_producteur': True,
+                            'producteur_activated_at': '2024-01-15T10:30:00Z',
+                            'active_roles': ['consommateur', 'producteur']
+                        }
+                    }
+                }
+            }
+        },
+        400: {'description': 'Profil non complété ou données invalides'}
+    },
+    tags=['Roles']
+)
+
+ROLES_STATUS_SCHEMA = extend_schema(
+    operation_id="get_roles_status",
+    summary="Statut des rôles",
+    description="Récupère le statut de tous les rôles disponibles",
+    responses={
+        200: {
+            'description': 'Statut des rôles',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'active_roles': ['consommateur', 'producteur'],
+                        'available_roles': {
+                            'producteur': {
+                                'active': True,
+                                'verified': False,
+                                'activated_at': '2024-01-15T10:30:00Z'
+                            },
+                            'transporteur': {
+                                'active': False,
+                                'verified': False,
+                                'activated_at': None
+                            }
+                        },
+                        'profile_completed': True
+                    }
+                }
+            }
+        }
+    },
+    tags=['Roles']
+)
+
+PASSWORD_RESET_REQUEST_SCHEMA = extend_schema(
+    operation_id="password_reset_request",
+    summary="Demander reset password",
+    description="Envoie un code OTP et un lien de reset par email",
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'identifier': {'type': 'string', 'description': 'Email ou téléphone'}
+            },
+            'required': ['identifier']
+        }
+    },
+    responses={
+        200: {'description': 'Code envoyé si utilisateur existe'}
+    },
+    tags=['Password Reset']
+)
+
+OTP_VERIFICATION_SCHEMA = extend_schema(
+    operation_id="verify_otp",
+    summary="Vérifier code OTP",
+    description="Valide le code OTP à 6 chiffres",
+    responses={
+        200: {'description': 'Code validé'},
+        400: {'description': 'Code invalide ou expiré'}
+    },
+    tags=['Password Reset']
+)
+
+TOKEN_VALIDATION_SCHEMA = extend_schema(
+    operation_id="validate_token",
+    summary="Valider token reset",
+    description="Vérifie la validité du token de reset",
+    responses={
+        200: {'description': 'Token valide'},
+        400: {'description': 'Token invalide ou expiré'}
+    },
+    tags=['Password Reset']
+)
+
+PASSWORD_RESET_CONFIRM_SCHEMA = extend_schema(
+    operation_id="reset_password",
+    summary="Confirmer nouveau mot de passe",
+    description="Définit le nouveau mot de passe",
+    responses={
+        200: {'description': 'Mot de passe réinitialisé'},
+        400: {'description': 'Token invalide ou mots de passe non correspondants'}
+    },
+    tags=['Password Reset']
+)
+
