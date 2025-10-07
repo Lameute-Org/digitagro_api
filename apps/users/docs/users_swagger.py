@@ -25,6 +25,7 @@ TAG_AUTH = 'Authentication'
 TAG_PROFILE = 'Profile'
 TAG_PASSWORD_RESET = 'Password Reset'
 TAG_SOCIAL_AUTH = 'Social Authentication'
+TAG_ROLES = 'Roles'
 
 # Descriptions réutilisables
 DESC_PROFILE_COMPLETED = 'État de complétion du profil'
@@ -36,8 +37,8 @@ DESC_USER_PROFILE = "Profil complet de l'utilisateur connecté"
 
 USER_REGISTRATION_SCHEMA = extend_schema(
     operation_id="user_registration",
-    summary="Inscription utilisateur avec rôle",
-    description="Créer un nouveau compte utilisateur avec sélection du rôle spécifique.",
+    summary="Inscription utilisateur",
+    description="Créer un nouveau compte. Tous les utilisateurs sont consommateurs par défaut. Les rôles professionnels s'activent à la demande.",
     responses={
         201: {
             'description': MSG_USER_CREATED,
@@ -46,9 +47,14 @@ USER_REGISTRATION_SCHEMA = extend_schema(
                     'example': {
                         'user': {
                             'id': 1,
-                            'email': 'producteur@example.com',
-                            'role_choisi': 'producteur',
-                            'profile_completed': True
+                            'email': EXAMPLE_EMAIL,
+                            'is_consommateur': True,
+                            'is_producteur': False,
+                            'is_transporteur': False,
+                            'is_transformateur': False,
+                            'is_distributeur': False,
+                            'profile_completed': False,
+                            'active_roles': ['consommateur']
                         },
                         'token': EXAMPLE_TOKEN,
                         'expiry': EXAMPLE_EXPIRY
@@ -61,7 +67,7 @@ USER_REGISTRATION_SCHEMA = extend_schema(
     tags=[TAG_AUTH]
 )
 
-TOKEN_OBTAIN_SCHEMA = extend_schema(
+LOGIN_SCHEMA = extend_schema(
     operation_id="user_login",
     summary="Connexion utilisateur",
     description="Authentification via email ou téléphone avec génération de token Knox.",
@@ -69,8 +75,14 @@ TOKEN_OBTAIN_SCHEMA = extend_schema(
         CONTENT_TYPE_JSON: {
             'type': 'object',
             'properties': {
-                'identifier': {'type': 'string', 'description': 'Email ou numéro de téléphone'},
-                'password': {'type': 'string', 'description': 'Mot de passe'}
+                'identifier': {
+                    'type': 'string',
+                    'description': 'Email ou numéro de téléphone'
+                },
+                'password': {
+                    'type': 'string',
+                    'description': 'Mot de passe'
+                }
             },
             'required': ['identifier', 'password']
         }
@@ -101,24 +113,29 @@ TOKEN_OBTAIN_SCHEMA = extend_schema(
                                     'id': {'type': 'integer', 'example': 1},
                                     'email': {'type': 'string', 'example': EXAMPLE_EMAIL},
                                     'telephone': {'type': 'string', 'example': EXAMPLE_PHONE},
-                                    'nom': {'type': 'string', 'example': 'Jean'},
-                                    'prenom': {'type': 'string', 'example': 'Dupont'},
+                                    'nom': {'type': 'string', 'example': 'Dupont'},
+                                    'prenom': {'type': 'string', 'example': 'Jean'},
                                     'adresse': {'type': 'string', 'example': 'Yaoundé'},
                                     'avatar': {'type': 'string', 'example': '/media/avatars/photo.jpg'},
-                                    'role_choisi': {'type': 'string', 'example': 'producteur'},
                                     'profile_completed': {'type': 'boolean', 'example': True},
                                     'date_creation': {'type': 'string', 'format': 'date-time', 'example': '2024-01-15T10:30:00Z'},
-                                    'user_role': {'type': 'string', 'example': 'Producteur'},
-                                    'role_details': {
+                                    'active_roles': {
+                                        'type': 'array',
+                                        'items': {'type': 'string'},
+                                        'example': ['consommateur', 'producteur']
+                                    },
+                                    'role_profiles': {
                                         'type': 'object',
                                         'example': {
-                                            'type_production': 'Maraîchage',
-                                            'superficie': '2.50',
-                                            'certification': 'Bio'
+                                            'producteur': {
+                                                'type_production': 'Maraîchage',
+                                                'superficie': '2.50',
+                                                'total_productions': 5
+                                            }
                                         }
                                     }
                                 },
-                                'required': ['id', 'email', 'role_choisi', 'user_role']
+                                'required': ['id', 'email', 'active_roles']
                             }
                         },
                         'required': ['token', 'expiry', 'user']
@@ -168,7 +185,8 @@ USER_PROFILE_GET_SCHEMA = extend_schema(
     
     **Inclut :**
     - Informations de base (nom, email, etc.)
-    - Rôle et détails spécifiques au rôle
+    - Tous les rôles actifs et leur statut de vérification
+    - Détails des profils pour chaque rôle actif
     - État de complétion du profil
     """,
     responses={
@@ -178,20 +196,29 @@ USER_PROFILE_GET_SCHEMA = extend_schema(
                 CONTENT_TYPE_JSON: {
                     'example': {
                         'id': 1,
-                        'email': 'producteur@example.com',
+                        'email': EXAMPLE_EMAIL,
                         'telephone': EXAMPLE_PHONE,
                         'nom': 'Dupont',
                         'prenom': 'Jean',
                         'adresse': 'Yaoundé, Cameroun',
                         'avatar': '/media/avatars/photo.jpg',
-                        'role_choisi': 'producteur',
+                        'is_consommateur': True,
+                        'is_producteur': True,
+                        'is_transporteur': False,
+                        'is_transformateur': False,
+                        'is_distributeur': False,
+                        'is_producteur_verified': False,
+                        'is_transporteur_verified': False,
                         'profile_completed': True,
                         'date_creation': '2024-01-15T10:30:00Z',
-                        'user_role': 'Producteur',
-                        'role_details': {
-                            'type_production': 'Maraîchage',
-                            'superficie': '2.50',
-                            'certification': 'Bio'
+                        'active_roles': ['consommateur', 'producteur'],
+                        'role_profiles': {
+                            'producteur': {
+                                'type_production': 'Maraîchage',
+                                'superficie': '2.50',
+                                'certification': 'Bio',
+                                'total_productions': 5
+                            }
                         }
                     }
                 }
@@ -244,6 +271,8 @@ COMPLETE_PROFILE_SCHEMA = extend_schema(
             'type': 'object',
             'properties': {
                 'telephone': {'type': 'string', 'description': 'Requis si manquant'},
+                'nom': {'type': 'string'},
+                'prenom': {'type': 'string'},
                 'adresse': {'type': 'string', 'description': 'Requis si manquant'},
                 'avatar': {'type': 'string', 'format': 'binary'}
             }
@@ -262,9 +291,99 @@ COMPLETE_PROFILE_SCHEMA = extend_schema(
                     }
                 }
             }
-        }
+        },
+        400: {'description': MSG_INVALID_DATA}
     },
     tags=[TAG_PROFILE]
+)
+
+ROLE_ACTIVATION_SCHEMA = extend_schema(
+    operation_id="activate_role",
+    summary="Activer un rôle professionnel",
+    description="Active un rôle (producteur, transporteur, etc.) avec les informations requises",
+    request={
+        CONTENT_TYPE_JSON: {
+            'type': 'object',
+            'properties': {
+                'role': {
+                    'type': 'string',
+                    'enum': ['producteur', 'transporteur', 'transformateur', 'distributeur'],
+                    'description': 'Rôle à activer'
+                },
+                'type_production': {'type': 'string', 'description': 'Requis pour producteur'},
+                'superficie': {'type': 'number', 'description': 'Optionnel pour producteur'},
+                'type_vehicule': {'type': 'string', 'description': 'Requis pour transporteur'},
+                'capacite': {'type': 'number', 'description': 'Requis pour transporteur'},
+                'permis_transport': {'type': 'string', 'description': 'Optionnel pour transporteur'},
+                'type_transformation': {'type': 'string', 'description': 'Requis pour transformateur'},
+                'type_distribution': {'type': 'string', 'description': 'Requis pour distributeur'},
+                'zones_service': {'type': 'string', 'description': 'Optionnel pour distributeur'}
+            },
+            'required': ['role']
+        }
+    },
+    examples=[
+        OpenApiExample(
+            name='Activer producteur',
+            value={'role': 'producteur', 'type_production': 'Maraîchage', 'superficie': 2.5}
+        ),
+        OpenApiExample(
+            name='Activer transporteur',
+            value={'role': 'transporteur', 'type_vehicule': 'Camion', 'capacite': 5.0}
+        )
+    ],
+    responses={
+        200: {
+            'description': 'Rôle activé avec succès',
+            'content': {
+                CONTENT_TYPE_JSON: {
+                    'example': {
+                        'message': 'Rôle producteur activé avec succès',
+                        'user': {
+                            'id': 1,
+                            'is_producteur': True,
+                            'producteur_activated_at': '2024-01-15T10:30:00Z',
+                            'active_roles': ['consommateur', 'producteur']
+                        }
+                    }
+                }
+            }
+        },
+        400: {'description': 'Profil non complété ou données invalides'}
+    },
+    tags=[TAG_ROLES]
+)
+
+ROLES_STATUS_SCHEMA = extend_schema(
+    operation_id="get_roles_status",
+    summary="Statut des rôles",
+    description="Récupère le statut de tous les rôles disponibles",
+    responses={
+        200: {
+            'description': 'Statut des rôles',
+            'content': {
+                CONTENT_TYPE_JSON: {
+                    'example': {
+                        'active_roles': ['consommateur', 'producteur'],
+                        'available_roles': {
+                            'producteur': {
+                                'active': True,
+                                'verified': False,
+                                'activated_at': '2024-01-15T10:30:00Z'
+                            },
+                            'transporteur': {
+                                'active': False,
+                                'verified': False,
+                                'activated_at': None
+                            }
+                        },
+                        'profile_completed': True
+                    }
+                }
+            }
+        }
+    },
+    tags=[TAG_ROLES]
 )
 
 PASSWORD_RESET_REQUEST_SCHEMA = extend_schema(
@@ -309,7 +428,8 @@ PASSWORD_RESET_REQUEST_SCHEMA = extend_schema(
                     'example': {'message': 'Code de réinitialisation envoyé'}
                 }
             }
-        }
+        },
+        400: {'description': 'Utilisateur non trouvé'}
     },
     tags=[TAG_PASSWORD_RESET]
 )
@@ -435,307 +555,3 @@ GOOGLE_AUTH_SCHEMA = extend_schema(
     },
     tags=[TAG_SOCIAL_AUTH]
 )
-# ==================== DOCUMENTATION SCHEMAS ====================
-
-USER_REGISTRATION_SCHEMA = extend_schema(
-    operation_id="user_registration",
-    summary="Inscription utilisateur",
-    description="Créer un nouveau compte. Tous les utilisateurs sont consommateurs par défaut. Les rôles professionnels s'activent à la demande.",
-    responses={
-        201: {
-            'description': 'Utilisateur créé avec succès',
-            'content': {
-                'application/json': {
-                    'example': {
-                        'user': {
-                            'id': 1,
-                            'email': 'user@example.com',
-                            'is_consommateur': True,
-                            'is_producteur': False,
-                            'is_transporteur': False,
-                            'is_transformateur': False,
-                            'is_distributeur': False,
-                            'profile_completed': False,
-                            'active_roles': ['consommateur']
-                        },
-                        'token': '9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b',
-                        'expiry': '2024-12-31T23:59:59.999999Z'
-                    }
-                }
-            }
-        },
-        400: {'description': 'Données invalides'}
-    },
-    tags=['Authentication']
-)
-
-LOGIN_SCHEMA = extend_schema(
-    operation_id="user_login",
-    summary="Connexion utilisateur",
-    description="Authentification via email ou téléphone",
-    request={
-        'application/json': {
-            'type': 'object',
-            'properties': {
-                'identifier': {'type': 'string', 'description': 'Email ou téléphone'},
-                'password': {'type': 'string', 'description': 'Mot de passe'}
-            },
-            'required': ['identifier', 'password']
-        }
-    },
-    responses={
-        200: {
-            'description': 'Connexion réussie',
-            'content': {
-                'application/json': {
-                    'example': {
-                        'token': '9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b',
-                        'expiry': '2024-12-31T23:59:59.999999Z',
-                        'user': {
-                            'id': 1,
-                            'email': 'user@example.com',
-                            'active_roles': ['consommateur', 'producteur'],
-                            'role_profiles': {
-                                'producteur': {
-                                    'type_production': 'Maraîchage',
-                                    'superficie': '2.50'
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        400: {'description': 'Identifiants invalides'}
-    },
-    tags=['Authentication']
-)
-
-LOGOUT_SCHEMA = extend_schema(
-    operation_id="user_logout",
-    summary="Déconnexion",
-    description="Révoque le token actuel",
-    responses={
-        204: {'description': 'Déconnexion réussie'},
-        401: {'description': 'Non authentifié'}
-    },
-    tags=['Authentication']
-)
-
-LOGOUT_ALL_SCHEMA = extend_schema(
-    operation_id="user_logout_all",
-    summary="Déconnexion tous appareils",
-    description="Révoque tous les tokens de l'utilisateur",
-    responses={
-        204: {'description': 'Déconnexion réussie'},
-        401: {'description': 'Non authentifié'}
-    },
-    tags=['Authentication']
-)
-
-USER_PROFILE_GET_SCHEMA = extend_schema(
-    operation_id="get_user_profile",
-    summary="Consulter profil",
-    description="Récupère le profil complet avec tous les rôles actifs",
-    responses={
-        200: {
-            'description': 'Profil récupéré',
-            'content': {
-                'application/json': {
-                    'example': {
-                        'id': 1,
-                        'email': 'user@example.com',
-                        'telephone': '+237123456789',
-                        'is_consommateur': True,
-                        'is_producteur': True,
-                        'is_transporteur': False,
-                        'is_producteur_verified': False,
-                        'active_roles': ['consommateur', 'producteur'],
-                        'role_profiles': {
-                            'producteur': {
-                                'type_production': 'Maraîchage',
-                                'superficie': '2.50',
-                                'total_productions': 5
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    },
-    tags=['Profile']
-)
-
-USER_PROFILE_UPDATE_SCHEMA = extend_schema(
-    operation_id="update_user_profile",
-    summary="Mettre à jour profil",
-    description="Modification des informations personnelles",
-    request={
-        'multipart/form-data': {
-            'type': 'object',
-            'properties': {
-                'telephone': {'type': 'string'},
-                'nom': {'type': 'string'},
-                'prenom': {'type': 'string'},
-                'adresse': {'type': 'string'},
-                'avatar': {'type': 'string', 'format': 'binary'}
-            }
-        }
-    },
-    responses={
-        200: {'description': 'Profil mis à jour'},
-        400: {'description': 'Données invalides'}
-    },
-    tags=['Profile']
-)
-
-COMPLETE_PROFILE_SCHEMA = extend_schema(
-    operation_id="complete_profile",
-    summary="Compléter profil",
-    description="Complète les informations manquantes du profil",
-    responses={
-        200: {'description': 'Profil complété'},
-        400: {'description': 'Données invalides'}
-    },
-    tags=['Profile']
-)
-
-ROLE_ACTIVATION_SCHEMA = extend_schema(
-    operation_id="activate_role",
-    summary="Activer un rôle professionnel",
-    description="Active un rôle (producteur, transporteur, etc.) avec les informations requises",
-    request={
-        'application/json': {
-            'type': 'object',
-            'properties': {
-                'role': {
-                    'type': 'string',
-                    'enum': ['producteur', 'transporteur', 'transformateur', 'distributeur'],
-                    'description': 'Rôle à activer'
-                },
-                'type_production': {'type': 'string', 'description': 'Requis pour producteur'},
-                'superficie': {'type': 'number', 'description': 'Optionnel pour producteur'},
-                'type_vehicule': {'type': 'string', 'description': 'Requis pour transporteur'},
-                'capacite': {'type': 'number', 'description': 'Requis pour transporteur'},
-                'type_transformation': {'type': 'string', 'description': 'Requis pour transformateur'},
-                'type_distribution': {'type': 'string', 'description': 'Requis pour distributeur'}
-            },
-            'required': ['role']
-        }
-    },
-    examples=[
-        OpenApiExample(
-            name='Activer producteur',
-            value={'role': 'producteur', 'type_production': 'Maraîchage', 'superficie': 2.5}
-        ),
-        OpenApiExample(
-            name='Activer transporteur',
-            value={'role': 'transporteur', 'type_vehicule': 'Camion', 'capacite': 5.0}
-        )
-    ],
-    responses={
-        200: {
-            'description': 'Rôle activé avec succès',
-            'content': {
-                'application/json': {
-                    'example': {
-                        'message': 'Rôle producteur activé avec succès',
-                        'user': {
-                            'id': 1,
-                            'is_producteur': True,
-                            'producteur_activated_at': '2024-01-15T10:30:00Z',
-                            'active_roles': ['consommateur', 'producteur']
-                        }
-                    }
-                }
-            }
-        },
-        400: {'description': 'Profil non complété ou données invalides'}
-    },
-    tags=['Roles']
-)
-
-ROLES_STATUS_SCHEMA = extend_schema(
-    operation_id="get_roles_status",
-    summary="Statut des rôles",
-    description="Récupère le statut de tous les rôles disponibles",
-    responses={
-        200: {
-            'description': 'Statut des rôles',
-            'content': {
-                'application/json': {
-                    'example': {
-                        'active_roles': ['consommateur', 'producteur'],
-                        'available_roles': {
-                            'producteur': {
-                                'active': True,
-                                'verified': False,
-                                'activated_at': '2024-01-15T10:30:00Z'
-                            },
-                            'transporteur': {
-                                'active': False,
-                                'verified': False,
-                                'activated_at': None
-                            }
-                        },
-                        'profile_completed': True
-                    }
-                }
-            }
-        }
-    },
-    tags=['Roles']
-)
-
-PASSWORD_RESET_REQUEST_SCHEMA = extend_schema(
-    operation_id="password_reset_request",
-    summary="Demander reset password",
-    description="Envoie un code OTP et un lien de reset par email",
-    request={
-        'application/json': {
-            'type': 'object',
-            'properties': {
-                'identifier': {'type': 'string', 'description': 'Email ou téléphone'}
-            },
-            'required': ['identifier']
-        }
-    },
-    responses={
-        200: {'description': 'Code envoyé si utilisateur existe'}
-    },
-    tags=['Password Reset']
-)
-
-OTP_VERIFICATION_SCHEMA = extend_schema(
-    operation_id="verify_otp",
-    summary="Vérifier code OTP",
-    description="Valide le code OTP à 6 chiffres",
-    responses={
-        200: {'description': 'Code validé'},
-        400: {'description': 'Code invalide ou expiré'}
-    },
-    tags=['Password Reset']
-)
-
-TOKEN_VALIDATION_SCHEMA = extend_schema(
-    operation_id="validate_token",
-    summary="Valider token reset",
-    description="Vérifie la validité du token de reset",
-    responses={
-        200: {'description': 'Token valide'},
-        400: {'description': 'Token invalide ou expiré'}
-    },
-    tags=['Password Reset']
-)
-
-PASSWORD_RESET_CONFIRM_SCHEMA = extend_schema(
-    operation_id="reset_password",
-    summary="Confirmer nouveau mot de passe",
-    description="Définit le nouveau mot de passe",
-    responses={
-        200: {'description': 'Mot de passe réinitialisé'},
-        400: {'description': 'Token invalide ou mots de passe non correspondants'}
-    },
-    tags=['Password Reset']
-)
-

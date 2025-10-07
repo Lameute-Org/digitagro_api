@@ -40,13 +40,14 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = CustomUser
-        fields = ['email', 'telephone', 'nom', 'prenom', 'adresse', 
+        fields = ['email', 'telephone', 'nom', 'prenom', 'adresse', 'avatar',
                  'password', 'password_confirm']
         extra_kwargs = {
             'telephone': {'required': False},
             'nom': {'required': False},
             'prenom': {'required': False},
-            'adresse': {'required': False}
+            'adresse': {'required': False},
+            'avatar': {'required': False},
         }
     
     def validate(self, attrs):
