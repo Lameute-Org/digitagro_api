@@ -1,6 +1,31 @@
+# apps/production/serializers.py
 from rest_framework import serializers
 from rest_framework.validators import ValidationError
-from .models import Production, PhotoProduction, Commande, Paiement, Evaluation, PhotoEvaluation
+from .models import PhotoEvaluation, Production, PhotoProduction, Commande, Paiement, Evaluation
+
+
+class ProductionCreateWithRoleSerializer(serializers.ModelSerializer):
+    """Serializer pour première production avec activation producteur"""
+    # Champs producteur requis à la première production
+    type_production = serializers.CharField(max_length=100, write_only=True)
+    superficie = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, write_only=True)
+    certification = serializers.CharField(max_length=100, required=False, write_only=True, default='standard')
+    
+    class Meta:
+        model = Production
+        fields = [
+            'produit', 'type_production', 'quantite', 'unite_mesure', 
+            'prix_unitaire', 'latitude', 'longitude', 'adresse_complete',
+            'date_recolte', 'date_expiration', 'description', 
+            'conditions_stockage', 'certification', 'superficie'
+        ]
+    
+    def validate(self, attrs):
+        """Vérification que les champs producteur sont présents"""
+        if not attrs.get('type_production'):
+            raise ValidationError('Le type de production est requis pour devenir producteur')
+        return attrs
+
 
 class PhotoProductionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -56,8 +81,8 @@ class CommandeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Commande
         fields = '__all__'
-        read_only_fields = ['client', 'montant_total', 'date_creation', 'date_confirmation', 
-                           'date_expedition', 'date_livraison']
+        read_only_fields = ['client', 'montant_total', 'date_creation', 
+                           'date_confirmation', 'date_expedition', 'date_livraison']
     
     def validate(self, attrs):
         production = attrs.get('production')
@@ -67,6 +92,7 @@ class CommandeSerializer(serializers.ModelSerializer):
             raise ValidationError(f'Quantité disponible: {production.quantite_disponible}')
         
         return attrs
+
 
 class PaiementSerializer(serializers.ModelSerializer):
     class Meta:

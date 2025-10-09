@@ -11,15 +11,21 @@ TAG_EVALUATION = 'Évaluations'
 
 LIST_PRODUCTIONS_SCHEMA = extend_schema(
     operation_id="list_productions",
-    summary="Liste des productions",
-    description="Productions disponibles avec pagination",
+    summary="Liste des productions disponibles",
+    description="Récupère toutes les productions disponibles avec pagination",
+    parameters=[
+        OpenApiParameter('page', int, description='Numéro de page'),
+        OpenApiParameter('page_size', int, description='Taille de page'),
+    ],
     responses={
         200: {
-            'description': 'Liste paginée',
+            'description': 'Liste paginée des productions',
             'content': {
                 'application/json': {
                     'example': {
                         'count': 42,
+                        'next': 'http://api/productions/?page=2',
+                        'previous': None,
                         'results': [{
                             'id': 1,
                             'produit': 'Tomates',
@@ -32,7 +38,7 @@ LIST_PRODUCTIONS_SCHEMA = extend_schema(
                             'date_recolte': '2025-01-15',
                             'certification': 'bio',
                             'producteur_nom': 'Jean Dupont',
-                            'photo_principale': 'http://.../media/productions/photo.jpg',
+                            'photo_principale': 'http://api/media/productions/photo.jpg',
                             'note_moyenne': 4.5,
                             'latitude': 3.8667,
                             'longitude': 11.5167,
@@ -41,39 +47,104 @@ LIST_PRODUCTIONS_SCHEMA = extend_schema(
                     }
                 }
             }
-        }
+        },
+        401: {'description': 'Non authentifié'}
     },
     tags=[TAG_PRODUCTION]
 )
 
 CREATE_PRODUCTION_SCHEMA = extend_schema(
     operation_id="create_production",
-    summary="Créer production",
-    description="Déclarer une nouvelle production (Producteur uniquement)",
+    summary="Déclarer une production (activation producteur automatique)",
+    description="""
+    Création d'une production avec activation automatique du rôle producteur.
+    
+    **Si pas encore producteur:**
+    - Le profil doit être complété (nom, prénom, téléphone, adresse)
+    - Inclure type_production (REQUIS) + superficie/certification (optionnels)
+    - Le rôle producteur sera activé automatiquement
+    
+    **Si déjà producteur:**
+    - Seuls les champs production sont nécessaires
+    """,
     request={
-        'multipart/form-data': {
+        'application/json': {
             'type': 'object',
             'properties': {
-                'produit': {'type': 'string', 'example': 'Tomates'},
-                'type_production': {'type': 'string', 'enum': ['fruits', 'legumes', 'cereales', 'tubercules', 'elevage']},
-                'quantite': {'type': 'number', 'example': 100},
-                'unite_mesure': {'type': 'string', 'enum': ['kg', 'tonne', 'unite', 'litre', 'sac']},
-                'prix_unitaire': {'type': 'number', 'example': 500},
-                'latitude': {'type': 'number', 'example': 3.8667},
-                'longitude': {'type': 'number', 'example': 11.5167},
-                'adresse_complete': {'type': 'string'},
-                'date_recolte': {'type': 'string', 'format': 'date'},
-                'date_expiration': {'type': 'string', 'format': 'date'},
-                'certification': {'type': 'string', 'enum': ['bio', 'standard', 'agroecologique']},
-                'description': {'type': 'string'},
-                'conditions_stockage': {'type': 'string'}
+                # Champs producteur (première fois uniquement)
+                'type_production': {'type': 'string', 'description': 'REQUIS si pas encore producteur (Maraîchage, Élevage, etc.)'},
+                'superficie': {'type': 'number', 'description': 'Superficie en hectares (optionnel)'},
+                'certification': {'type': 'string', 'enum': ['bio', 'standard', 'agroecologique'], 'description': 'Type de certification'},
+                
+                # Champs production
+                'produit': {'type': 'string', 'description': 'Nom du produit'},
+                'quantite': {'type': 'number', 'description': 'Quantité disponible'},
+                'unite_mesure': {'type': 'string', 'enum': ['kg', 'tonne', 'litre', 'unite', 'sac']},
+                'prix_unitaire': {'type': 'number', 'description': 'Prix par unité en FCFA'},
+                'latitude': {'type': 'number', 'description': 'Latitude GPS'},
+                'longitude': {'type': 'number', 'description': 'Longitude GPS'},
+                'adresse_complete': {'type': 'string', 'description': 'Adresse détaillée'},
+                'date_recolte': {'type': 'string', 'format': 'date', 'description': 'Date de récolte'},
+                'date_expiration': {'type': 'string', 'format': 'date', 'description': 'Date limite (optionnel)'},
+                'description': {'type': 'string', 'description': 'Description détaillée'},
+                'conditions_stockage': {'type': 'string', 'description': 'Conditions de conservation'}
             },
-            'required': ['produit', 'type_production', 'quantite', 'unite_mesure', 'prix_unitaire', 'latitude', 'longitude']
+            'required': ['produit', 'quantite', 'unite_mesure', 'prix_unitaire', 'latitude', 'longitude', 'adresse_complete', 'date_recolte', 'description']
         }
     },
     responses={
-        201: {'description': 'Production créée'},
-        403: {'description': 'Producteur uniquement'}
+        201: {
+            'description': 'Production créée avec succès',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'id': 1,
+                        'produit': 'Tomates',
+                        'message': 'Production créée et rôle producteur activé'
+                    }
+                }
+            }
+        },
+        400: {
+            'description': 'Erreur validation',
+            'content': {
+                'application/json': {
+                    'examples': {
+                        'profil_incomplet': {
+                            'value': {'error': 'Complétez votre profil (nom, prénom, téléphone, adresse) avant de vendre'}
+                        },
+                        'champs_manquants': {
+                            'value': {'error': 'Le type de production est requis pour devenir producteur'}
+                        }
+                    }
+                }
+            }
+        },
+        401: {'description': 'Non authentifié'}
+    },
+    tags=[TAG_PRODUCTION]
+)
+
+UPDATE_PRODUCTION_SCHEMA = extend_schema(
+    operation_id="update_production",
+    summary="Modifier une production",
+    description="Modification partielle ou complète d'une production (propriétaire uniquement)",
+    responses={
+        200: {'description': 'Production modifiée'},
+        403: {'description': 'Non propriétaire'},
+        404: {'description': 'Production non trouvée'}
+    },
+    tags=[TAG_PRODUCTION]
+)
+
+DELETE_PRODUCTION_SCHEMA = extend_schema(
+    operation_id="delete_production",
+    summary="Supprimer une production",
+    description="Suppression définitive d'une production (propriétaire uniquement)",
+    responses={
+        204: {'description': 'Production supprimée'},
+        403: {'description': 'Non propriétaire'},
+        404: {'description': 'Production non trouvée'}
     },
     tags=[TAG_PRODUCTION]
 )
@@ -81,52 +152,29 @@ CREATE_PRODUCTION_SCHEMA = extend_schema(
 NEARBY_PRODUCTIONS_SCHEMA = extend_schema(
     operation_id="nearby_productions",
     summary="Productions à proximité",
-    description="Recherche par rayon GPS (défaut: 10km)",
+    description="Recherche des productions dans un rayon GPS défini",
     parameters=[
         OpenApiParameter('lat', float, description='Latitude', required=True),
         OpenApiParameter('lon', float, description='Longitude', required=True),
-        OpenApiParameter('radius', float, description='Rayon en km (défaut: 10)'),
+        OpenApiParameter('radius', float, description='Rayon en km (défaut: 10km)'),
     ],
     responses={
-        200: {'description': 'Productions dans le rayon'},
-        400: {'description': 'lat et lon requis'}
+        200: {
+            'description': 'Productions trouvées dans le rayon',
+            'content': {
+                'application/json': {
+                    'example': [{
+                        'id': 1,
+                        'produit': 'Tomates',
+                        'distance_km': 2.5,
+                        'producteur_nom': 'Jean Dupont',
+                        'prix_unitaire': 500
+                    }]
+                }
+            }
+        },
+        400: {'description': 'Paramètres lat/lon manquants'}
     },
-    tags=[TAG_PRODUCTION]
-)
-
-UPLOAD_PHOTO_SCHEMA = extend_schema(
-    operation_id="upload_production_photo",
-    summary="Ajouter photo",
-    description="Upload photo production (max 5 par production)",
-    request={
-        'multipart/form-data': {
-            'type': 'object',
-            'properties': {
-                'image': {'type': 'string', 'format': 'binary'},
-                'ordre': {'type': 'integer', 'example': 0}
-            },
-            'required': ['image']
-        }
-    },
-    responses={
-        201: {'description': 'Photo ajoutée'},
-        400: {'description': 'Maximum 5 photos'}
-    },
-    tags=[TAG_PRODUCTION]
-)
-
-SEARCH_PRODUCTIONS_SCHEMA = extend_schema(
-    operation_id="search_productions",
-    summary="Recherche Elasticsearch",
-    description="Recherche avancée avec filtres",
-    parameters=[
-        OpenApiParameter('search', str, description='Terme recherche'),
-        OpenApiParameter('type_production', str, description='Type production'),
-        OpenApiParameter('certification', str, description='Certification'),
-        OpenApiParameter('disponible', bool, description='Disponible'),
-        OpenApiParameter('ordering', str, description='Tri: prix_unitaire, -date_creation'),
-    ],
-    responses={200: {'description': 'Résultats'}},
     tags=[TAG_PRODUCTION]
 )
 
@@ -135,10 +183,14 @@ SEARCH_PRODUCTIONS_SCHEMA = extend_schema(
 LIST_COMMANDES_SCHEMA = extend_schema(
     operation_id="list_commandes",
     summary="Mes commandes",
-    description="Liste commandes (client) ou reçues (producteur)",
+    description="""
+    Liste des commandes selon le rôle:
+    - Client: commandes passées
+    - Producteur: commandes reçues
+    """,
     responses={
         200: {
-            'description': 'Liste commandes',
+            'description': 'Liste des commandes',
             'content': {
                 'application/json': {
                     'example': [{
@@ -152,7 +204,7 @@ LIST_COMMANDES_SCHEMA = extend_schema(
                         'quantite': 10,
                         'montant_total': 5000,
                         'statut': 'confirmee',
-                        'adresse_livraison': 'Yaoundé',
+                        'adresse_livraison': 'Yaoundé, Bastos',
                         'date_creation': '2025-01-15T10:00:00Z',
                         'date_confirmation': '2025-01-15T11:00:00Z'
                     }]
@@ -165,66 +217,47 @@ LIST_COMMANDES_SCHEMA = extend_schema(
 
 CREATE_COMMANDE_SCHEMA = extend_schema(
     operation_id="create_commande",
-    summary="Passer commande",
-    description="Créer commande sur une production",
+    summary="Passer une commande",
+    description="Création d'une commande sur une production disponible",
     request={
         'application/json': {
             'type': 'object',
             'properties': {
-                'production': {'type': 'integer'},
-                'quantite': {'type': 'number'},
-                'adresse_livraison': {'type': 'string'},
-                'notes': {'type': 'string'},
+                'production': {'type': 'integer', 'description': 'ID de la production'},
+                'quantite': {'type': 'number', 'description': 'Quantité souhaitée'},
+                'adresse_livraison': {'type': 'string', 'description': 'Adresse de livraison'},
+                'notes': {'type': 'string', 'description': 'Instructions spéciales'},
                 'date_livraison_souhaitee': {'type': 'string', 'format': 'date'}
             },
             'required': ['production', 'quantite', 'adresse_livraison']
         }
     },
     responses={
-        201: {'description': 'Commande créée - Notification producteur envoyée'},
-        400: {'description': 'Quantité insuffisante'}
+        201: {'description': 'Commande créée - Notification envoyée au producteur'},
+        400: {'description': 'Quantité insuffisante ou données invalides'}
     },
     tags=[TAG_COMMANDE]
 )
 
 CONFIRM_COMMANDE_SCHEMA = extend_schema(
     operation_id="confirm_commande",
-    summary="Confirmer commande",
-    description="Producteur confirme la commande",
+    summary="Confirmer une commande",
+    description="Le producteur confirme la commande reçue",
     responses={
-        200: {'description': 'Commande confirmée - Notification client'},
-        403: {'description': 'Producteur uniquement'}
+        200: {'description': 'Commande confirmée - Notification envoyée au client'},
+        403: {'description': 'Réservé aux producteurs'},
+        404: {'description': 'Commande non trouvée'}
     },
     tags=[TAG_COMMANDE]
 )
 
 CANCEL_COMMANDE_SCHEMA = extend_schema(
     operation_id="cancel_commande",
-    summary="Annuler commande",
-    description="Client ou producteur annule",
+    summary="Annuler une commande",
+    description="Annulation par le client ou le producteur",
     responses={
-        200: {'description': 'Commande annulée - Notifications envoyées'}
-    },
-    tags=[TAG_COMMANDE]
-)
-
-SHIP_COMMANDE_SCHEMA = extend_schema(
-    operation_id="ship_commande",
-    summary="Expédier commande",
-    description="Producteur marque comme expédiée",
-    responses={
-        200: {'description': 'Expédiée - Notification client'},
-        403: {'description': 'Producteur uniquement'}
-    },
-    tags=[TAG_COMMANDE]
-)
-
-DELIVER_COMMANDE_SCHEMA = extend_schema(
-    operation_id="deliver_commande",
-    summary="Livrer commande",
-    description="Marquer comme livrée",
-    responses={
-        200: {'description': 'Livrée - Notifications client + producteur'}
+        200: {'description': 'Commande annulée - Notifications envoyées'},
+        404: {'description': 'Commande non trouvée'}
     },
     tags=[TAG_COMMANDE]
 )
@@ -233,28 +266,23 @@ DELIVER_COMMANDE_SCHEMA = extend_schema(
 
 INITIATE_PAIEMENT_SCHEMA = extend_schema(
     operation_id="initiate_paiement",
-    summary="Initier paiement",
-    description="Lancer paiement mobile money",
+    summary="Initier un paiement",
+    description="Lancement d'un paiement mobile money",
     request={
         'application/json': {
             'type': 'object',
             'properties': {
                 'commande': {'type': 'integer'},
                 'methode': {'type': 'string', 'enum': ['orange_money', 'mtn_money', 'virement', 'cash']},
-                'numero_telephone': {'type': 'string'}
+                'numero_telephone': {'type': 'string', 'description': 'Numéro mobile money'}
             },
             'required': ['commande', 'methode']
         }
     },
-    responses={201: {'description': 'Paiement initié'}},
-    tags=[TAG_PAIEMENT]
-)
-
-CALLBACK_PAIEMENT_SCHEMA = extend_schema(
-    operation_id="paiement_callback",
-    summary="Webhook mobile money",
-    description="Callback opérateurs (Orange/MTN)",
-    responses={200: {'description': 'Callback reçu'}},
+    responses={
+        201: {'description': 'Paiement initié - En attente de confirmation'},
+        400: {'description': 'Données invalides'}
+    },
     tags=[TAG_PAIEMENT]
 )
 
@@ -262,23 +290,28 @@ CALLBACK_PAIEMENT_SCHEMA = extend_schema(
 
 CREATE_EVALUATION_SCHEMA = extend_schema(
     operation_id="create_evaluation",
-    summary="Évaluer producteur",
-    description="Noter commande livrée (1-5 étoiles)",
+    summary="Évaluer un producteur",
+    description="Noter une commande livrée (1-5 étoiles)",
     request={
         'multipart/form-data': {
             'type': 'object',
             'properties': {
-                'commande': {'type': 'integer'},
-                'note': {'type': 'integer', 'minimum': 1, 'maximum': 5},
-                'commentaire': {'type': 'string'},
-                'photos': {'type': 'array', 'items': {'type': 'string', 'format': 'binary'}}
+                'commande': {'type': 'integer', 'description': 'ID de la commande'},
+                'note': {'type': 'integer', 'minimum': 1, 'maximum': 5, 'description': 'Note de 1 à 5'},
+                'commentaire': {'type': 'string', 'description': 'Commentaire détaillé'},
+                'photos': {
+                    'type': 'array',
+                    'items': {'type': 'string', 'format': 'binary'},
+                    'description': 'Photos du produit reçu'
+                }
             },
             'required': ['commande', 'note', 'commentaire']
         }
     },
     responses={
-        201: {'description': 'Évaluation créée - Notification producteur'},
-        400: {'description': 'Commande déjà évaluée ou non livrée'}
+        201: {'description': 'Évaluation créée - Notification envoyée au producteur'},
+        400: {'description': 'Commande déjà évaluée ou non livrée'},
+        404: {'description': 'Commande non trouvée'}
     },
     tags=[TAG_EVALUATION]
 )
