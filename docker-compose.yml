@@ -20,12 +20,32 @@ services:
       - DB_NAME=digitagro_db
       - DB_USER=digitagro
       - DB_PASSWORD=Digitagro@2002
+      - USE_ELASTICSEARCH=True  # ← Activer Elasticsearch
+      - ELASTICSEARCH_HOST=http://elasticsearch:9200  # ← URL Elasticsearch
+    depends_on:
+      - elasticsearch
+    networks:
+      - digitagro_network
+
+  # Ajouter Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
+    container_name: digitagro_elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
     networks:
       - digitagro_network
 
 volumes:
   static_volume:
   media_volume:
+  elasticsearch_data:  # ← Nouveau volume
 
 networks:
   digitagro_network:

@@ -3,7 +3,7 @@ import requests
 import json
 from datetime import date, timedelta
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://185.217.125.37:8001/"
 token = None
 
 class Colors:
@@ -63,8 +63,8 @@ print(f"{Colors.YELLOW}{'='*60}{Colors.END}\n")
 # ==================== 1. INSCRIPTION ====================
 print(f"\n{Colors.GREEN}1️⃣  INSCRIPTION{Colors.END}")
 result = api_call('POST', '/api/auth/register/', {
-    "email": "davyemane4@gmail.com",
-    "telephone": "+237672179014",
+    "email": "davyemaneaz4@gmail.com",
+    "telephone": "+237472179014",
     "nom": "EMANE",
     "prenom": "Davy",
     "adresse": "Yaoundé, Cameroun",
