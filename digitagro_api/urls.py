@@ -23,7 +23,7 @@ urlpatterns = [
     # API Endpoints
     path('api/auth/', include('apps.users.urls')),
     path('api/notifications/', include('apps.notifications.urls')),
-    path('api/production/', include('apps.production.urls')),
+    path('api/productions/', include('apps.production.urls')),
 
     
     # Social Auth

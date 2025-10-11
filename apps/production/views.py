@@ -30,9 +30,7 @@ from drf_spectacular.utils import extend_schema
 
 
 class ProductionViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet pour gérer les productions avec activation automatique du rôle producteur
-    """
+    """ViewSet pour gérer les productions avec activation automatique du rôle producteur"""
     permission_classes = [IsAuthenticated, CanBecomeProducteur]
     
     def get_queryset(self):
@@ -41,20 +39,64 @@ class ProductionViewSet(viewsets.ModelViewSet):
         ).prefetch_related('photos').all()
     
     def get_serializer_class(self):
-        if self.action == 'create' and not self.request.user.is_producteur:
-            return ProductionCreateWithRoleSerializer
+        # Pour la création uniquement
+        if self.action == 'create':
+            # Si pas encore producteur, utiliser le serializer avec champs producteur
+            if not self.request.user.is_producteur:
+                return ProductionCreateWithRoleSerializer
+            # Si déjà producteur, utiliser le serializer normal
+            return ProductionDetailSerializer
+        
+        # Pour les autres actions (list, retrieve, update)
         return ProductionDetailSerializer if self.action == 'retrieve' else ProductionListSerializer
-    
+        
     def get_permissions(self):
         """Permissions personnalisées selon l'action"""
         if self.action in ['update', 'partial_update', 'destroy']:
             return [IsAuthenticated(), IsProducteurOwner()]
         return [IsAuthenticated(), CanBecomeProducteur()]
     
+    @extend_schema(
+        operation_id="my_productions",
+        summary="Mes productions",
+        description="Liste des productions créées par l'utilisateur connecté (producteur uniquement)",
+        responses={
+            200: ProductionListSerializer(many=True),
+            403: {'description': 'Vous devez être producteur'}
+        },
+        tags=['Productions']
+    )
+    @action(detail=False, methods=['get'])
+    def mine(self, request):
+        """Liste des productions de l'utilisateur connecté"""
+        # Vérifier si l'utilisateur est producteur
+        if not request.user.is_producteur or not hasattr(request.user, 'producteur'):
+            return Response(
+                {'error': 'Vous devez être producteur pour accéder à cette ressource'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Filtrer les productions du producteur connecté
+        my_productions = Production.objects.filter(
+            producteur=request.user.producteur
+        ).select_related('producteur__user').prefetch_related('photos')
+        
+        # Paginer les résultats
+        page = self.paginate_queryset(my_productions)
+        if page is not None:
+            serializer = ProductionListSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = ProductionListSerializer(my_productions, many=True, context={'request': request})
+        return Response(serializer.data)
+    
+    @LIST_PRODUCTIONS_SCHEMA
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+    
+    @CREATE_PRODUCTION_SCHEMA
     def create(self, request, *args, **kwargs):
-        """
-        Création de production avec activation automatique du rôle producteur
-        """
+        """Création de production avec activation automatique du rôle producteur"""
         # Vérification profil complété
         if not request.user.profile_completed:
             return Response(
@@ -95,23 +137,19 @@ class ProductionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_201_CREATED
             )
         
-        # Si déjà producteur, création normale
-        serializer = ProductionDetailSerializer(data=request.data)
+        # ✅ Si déjà producteur : utiliser get_serializer() qui appellera get_serializer_class()
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        production = serializer.save(producteur=request.user.producteur)
+        self.perform_create(serializer)
         
         return Response(
-            ProductionDetailSerializer(production).data,
+            ProductionDetailSerializer(serializer.instance).data,
             status=status.HTTP_201_CREATED
         )
-    
-    @LIST_PRODUCTIONS_SCHEMA
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
-    
-    @CREATE_PRODUCTION_SCHEMA
-    def create(self, request, *args, **kwargs):
-        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        """Méthode appelée après validation pour sauvegarder"""
+        serializer.save(producteur=self.request.user.producteur)    
     
     @NEARBY_PRODUCTIONS_SCHEMA
     @action(detail=False, methods=['get'])
@@ -164,8 +202,6 @@ class ProductionViewSet(viewsets.ModelViewSet):
         serializer.save(production=production, ordre=production.photos.count())
         
         return Response(serializer.data, status=201)
-
-
 class ProductionSearchViewSet(DocumentViewSet):
     """Recherche avancée avec Elasticsearch"""
     document = ProductionDocument
@@ -200,7 +236,11 @@ class ProductionSearchViewSet(DocumentViewSet):
 class CommandeViewSet(viewsets.ModelViewSet):
     """Gestion des commandes"""
     serializer_class = CommandeSerializer
-    permission_classes = [IsAuthenticated, IsCommandeOwner]
+    
+    def get_permissions(self):
+        if self.action == 'create':
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), IsCommandeOwner()]
     
     def get_queryset(self):
         user = self.request.user
@@ -219,16 +259,22 @@ class CommandeViewSet(viewsets.ModelViewSet):
         return super().create(request, *args, **kwargs)
     
     def perform_create(self, serializer):
-        serializer.save(client=self.request.user)
+        commande = serializer.save(client=self.request.user)
         
+        # Notification producteur
         from apps.notifications.services import NotificationService
-        commande = serializer.instance
-        NotificationService.notify_producteur_new_order(commande)
+        NotificationService.create(
+            recipient=commande.production.producteur.user,
+            notif_type='new_order',
+            title='Nouvelle commande reçue',
+            message=f'{commande.client.get_full_name()} - {commande.quantite} {commande.production.produit}',
+            content_object=commande,
+            data={'order_id': commande.id, 'amount': float(commande.montant_total)}
+        )
     
     @CONFIRM_COMMANDE_SCHEMA
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
-        """Producteur confirme la commande"""
         commande = self.get_object()
         
         if not hasattr(request.user, 'producteur'):
@@ -239,27 +285,39 @@ class CommandeViewSet(viewsets.ModelViewSet):
         commande.save()
         
         from apps.notifications.services import NotificationService
-        NotificationService.notify_consommateur_order_confirmed(commande)
+        NotificationService.create(
+            recipient=commande.client,
+            notif_type='order_confirmed',
+            title='Commande confirmée',
+            message=f'Votre commande #{commande.id} a été confirmée',
+            content_object=commande
+        )
         
         return Response({'status': 'confirmée'})
     
     @CANCEL_COMMANDE_SCHEMA
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
-        """Annuler commande"""
         commande = self.get_object()
         commande.statut = 'annulee'
         commande.save()
         
         from apps.notifications.services import NotificationService
-        NotificationService.notify_order_cancelled(commande, request.user)
+        # Notifier l'autre partie
+        other_user = commande.production.producteur.user if request.user == commande.client else commande.client
+        NotificationService.create(
+            recipient=other_user,
+            notif_type='order_cancelled',
+            title='Commande annulée',
+            message=f'Commande #{commande.id} annulée par {request.user.get_full_name()}',
+            content_object=commande
+        )
         
         return Response({'status': 'annulée'})
     
     @SHIP_COMMANDE_SCHEMA
     @action(detail=True, methods=['post'])
     def ship(self, request, pk=None):
-        """Producteur marque comme expédiée"""
         commande = self.get_object()
         
         if not hasattr(request.user, 'producteur'):
@@ -270,26 +328,45 @@ class CommandeViewSet(viewsets.ModelViewSet):
         commande.save()
         
         from apps.notifications.services import NotificationService
-        NotificationService.notify_consommateur_product_shipped(commande)
+        NotificationService.create(
+            recipient=commande.client,
+            notif_type='product_shipped',
+            title='Produit expédié',
+            message=f'Votre commande #{commande.id} a été expédiée',
+            content_object=commande
+        )
         
         return Response({'status': 'expédiée'})
     
     @DELIVER_COMMANDE_SCHEMA
     @action(detail=True, methods=['post'])
     def deliver(self, request, pk=None):
-        """Marquer comme livrée"""
         commande = self.get_object()
         commande.statut = 'livree'
         commande.date_livraison = timezone.now()
         commande.save()
         
         from apps.notifications.services import NotificationService
-        NotificationService.notify_consommateur_delivery_completed(commande)
-        NotificationService.notify_producteur_delivery_completed(commande)
+        
+        # Notification client
+        NotificationService.create(
+            recipient=commande.client,
+            notif_type='delivery_completed',
+            title='Livraison effectuée',
+            message=f'Votre commande #{commande.id} a été livrée',
+            content_object=commande
+        )
+        
+        # Notification producteur
+        NotificationService.create(
+            recipient=commande.production.producteur.user,
+            notif_type='delivery_completed',
+            title='Livraison effectuée',
+            message=f'Commande #{commande.id} livrée au client',
+            content_object=commande
+        )
         
         return Response({'status': 'livrée'})
-
-
 class PaiementViewSet(viewsets.ModelViewSet):
     """Gestion des paiements"""
     serializer_class = PaiementSerializer
@@ -326,5 +403,13 @@ class EvaluationViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         evaluation = serializer.save()
         
+        # ✅ CORRECTION : Utiliser NotificationService.create() directement
         from apps.notifications.services import NotificationService
-        NotificationService.notify_producteur_review(evaluation)
+        NotificationService.create(
+            recipient=evaluation.commande.production.producteur.user,  # Accès via commande → production → producteur
+            notif_type='new_review',
+            title='Nouvelle évaluation',
+            message=f'{evaluation.note}/5 étoiles - {evaluation.commentaire[:50]}',
+            content_object=evaluation,
+            data={'rating': evaluation.note}
+        )
