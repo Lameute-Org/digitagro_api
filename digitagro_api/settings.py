@@ -77,7 +77,12 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {"hosts": [('127.0.0.1', 6379)]},
+        'CONFIG': {
+            "hosts": [(
+                os.getenv('REDIS_HOST', '127.0.0.1'),
+                int(os.getenv('REDIS_PORT', 6379))
+            )],
+        },
     },
 }
 
