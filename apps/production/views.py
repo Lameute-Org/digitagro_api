@@ -1,41 +1,60 @@
 # apps/production/views.py
-from rest_framework import generics, status
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.utils import timezone
 from django.db import transaction
-from django.shortcuts import get_object_or_404
+from django_elasticsearch_dsl_drf.viewsets import DocumentViewSet
+from django_elasticsearch_dsl_drf.filter_backends import (
+    SearchFilterBackend, FilteringFilterBackend, OrderingFilterBackend,
+    GeoSpatialFilteringFilterBackend, GeoSpatialOrderingFilterBackend
+)
 from .models import Production, Commande, Paiement, Evaluation, PhotoProduction
 from .serializers import (
-    ProductionListSerializer, 
-    ProductionDetailSerializer, 
-    ProductionCreateWithRoleSerializer,
-    CommandeSerializer,
-    PaiementSerializer, 
-    EvaluationSerializer, 
-    PhotoProductionSerializer
+    ProductionListSerializer, ProductionDetailSerializer, 
+    ProductionCreateWithRoleSerializer, CommandeSerializer,
+    PaiementSerializer, EvaluationSerializer, PhotoProductionSerializer
 )
-from .permissions import IsProducteurOrReadOnly, IsCommandeOwner, CanBecomeProducteur
+from .documents import ProductionDocument
+from .permissions import IsProducteurOrReadOnly, IsCommandeOwner, CanBecomeProducteur, IsProducteurOwner
 from apps.users.models import Producteur
+from .docs.production_swagger import (
+    LIST_COMMANDES_SCHEMA, CREATE_COMMANDE_SCHEMA, CREATE_PRODUCTION_SCHEMA,
+    NEARBY_PRODUCTIONS_SCHEMA, UPLOAD_PHOTO_SCHEMA, SEARCH_PRODUCTIONS_SCHEMA,
+    LIST_PRODUCTIONS_SCHEMA, CONFIRM_COMMANDE_SCHEMA, CANCEL_COMMANDE_SCHEMA,
+    SHIP_COMMANDE_SCHEMA, DELIVER_COMMANDE_SCHEMA, INITIATE_PAIEMENT_SCHEMA,
+    CALLBACK_PAIEMENT_SCHEMA, CREATE_EVALUATION_SCHEMA,
+)
+from drf_spectacular.utils import extend_schema
 
 
-class ProductionListCreateView(generics.ListCreateAPIView):
+class ProductionViewSet(viewsets.ModelViewSet):
     """
-    Liste des productions (GET) ou création avec activation automatique producteur (POST)
+    ViewSet pour gérer les productions avec activation automatique du rôle producteur
     """
     permission_classes = [IsAuthenticated, CanBecomeProducteur]
     
     def get_queryset(self):
         return Production.objects.select_related(
             'producteur__user'
-        ).prefetch_related('photos').filter(disponible=True)
+        ).prefetch_related('photos').all()
     
     def get_serializer_class(self):
-        if self.request.method == 'POST' and not self.request.user.is_producteur:
+        if self.action == 'create' and not self.request.user.is_producteur:
             return ProductionCreateWithRoleSerializer
-        return ProductionListSerializer if self.request.method == 'GET' else ProductionDetailSerializer
+        return ProductionDetailSerializer if self.action == 'retrieve' else ProductionListSerializer
+    
+    def get_permissions(self):
+        """Permissions personnalisées selon l'action"""
+        if self.action in ['update', 'partial_update', 'destroy']:
+            return [IsAuthenticated(), IsProducteurOwner()]
+        return [IsAuthenticated(), CanBecomeProducteur()]
     
     def create(self, request, *args, **kwargs):
+        """
+        Création de production avec activation automatique du rôle producteur
+        """
         # Vérification profil complété
         if not request.user.profile_completed:
             return Response(
@@ -49,15 +68,20 @@ class ProductionListCreateView(generics.ListCreateAPIView):
             serializer.is_valid(raise_exception=True)
             
             with transaction.atomic():
+                # Extraction des données pour le profil producteur
+                type_production = serializer.validated_data.pop('type_production')
+                superficie = serializer.validated_data.pop('superficie', None)
+                certification = serializer.validated_data.pop('certification', '')
+                
                 # Activation rôle producteur
                 request.user.activate_role('producteur')
                 
                 # Création profil producteur
                 producteur = Producteur.objects.create(
                     user=request.user,
-                    type_production=serializer.validated_data.pop('type_production'),
-                    superficie=serializer.validated_data.pop('superficie', None),
-                    certification=serializer.validated_data.pop('certification', '')
+                    type_production=type_production,
+                    superficie=superficie,
+                    certification=certification
                 )
                 
                 # Création production
@@ -74,119 +98,233 @@ class ProductionListCreateView(generics.ListCreateAPIView):
         # Si déjà producteur, création normale
         serializer = ProductionDetailSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(producteur=request.user.producteur)
+        production = serializer.save(producteur=request.user.producteur)
         
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-
-class ProductionRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
-    """Détail, modification et suppression production"""
-    queryset = Production.objects.all()
-    serializer_class = ProductionDetailSerializer
-    permission_classes = [IsAuthenticated, IsProducteurOwner]
+        return Response(
+            ProductionDetailSerializer(production).data,
+            status=status.HTTP_201_CREATED
+        )
     
-    def get_queryset(self):
-        return super().get_queryset().select_related('producteur__user')
-
-
-class ProductionNearbyListView(generics.ListAPIView):
-    """Recherche productions par proximité GPS"""
-    serializer_class = ProductionListSerializer
-    permission_classes = [IsAuthenticated]
+    @LIST_PRODUCTIONS_SCHEMA
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
     
-    def get_queryset(self):
-        lat = self.request.query_params.get('lat')
-        lon = self.request.query_params.get('lon')
-        radius = float(self.request.query_params.get('radius', 10))
+    @CREATE_PRODUCTION_SCHEMA
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+    
+    @NEARBY_PRODUCTIONS_SCHEMA
+    @action(detail=False, methods=['get'])
+    def nearby(self, request):
+        """Recherche productions par proximité GPS"""
+        lat = request.query_params.get('lat')
+        lon = request.query_params.get('lon')
+        radius = float(request.query_params.get('radius', 10))
         
         if not (lat and lon):
-            return Production.objects.none()
+            return Response({'error': 'lat et lon requis'}, status=400)
         
         lat, lon = float(lat), float(lon)
         
-        # Filtrage par distance Haversine
-        productions = []
-        for p in Production.objects.filter(disponible=True):
-            if self._haversine_distance(lat, lon, float(p.latitude), float(p.longitude)) <= radius:
-                productions.append(p.id)
+        productions = [
+            p for p in self.get_queryset().filter(disponible=True)
+            if self._haversine_distance(lat, lon, float(p.latitude), float(p.longitude)) <= radius
+        ]
         
-        return Production.objects.filter(id__in=productions)
+        serializer = self.get_serializer(productions, many=True)
+        return Response(serializer.data)
     
     @staticmethod
     def _haversine_distance(lat1, lon1, lat2, lon2):
         from math import radians, cos, sin, asin, sqrt
+        
         lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
         dlon = lon2 - lon1
         dlat = lat2 - lat1
         a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
         c = 2 * asin(sqrt(a))
-        return 6371 * c
+        km = 6371 * c
+        return km
+    
+    @UPLOAD_PHOTO_SCHEMA
+    @action(detail=True, methods=['post'])
+    def upload_photo(self, request, pk=None):
+        """Upload photo production (max 5 par production)"""
+        production = self.get_object()
+        
+        # Vérifier que l'utilisateur est le propriétaire
+        if production.producteur.user != request.user:
+            return Response({'error': 'Non autorisé'}, status=403)
+        
+        if production.photos.count() >= 5:
+            return Response({'error': 'Maximum 5 photos'}, status=400)
+        
+        serializer = PhotoProductionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(production=production, ordre=production.photos.count())
+        
+        return Response(serializer.data, status=201)
 
 
-class CommandeListCreateView(generics.ListCreateAPIView):
-    """Liste et création de commandes"""
+class ProductionSearchViewSet(DocumentViewSet):
+    """Recherche avancée avec Elasticsearch"""
+    document = ProductionDocument
+    serializer_class = ProductionListSerializer
+    permission_classes = [AllowAny]
+    
+    filter_backends = [
+        SearchFilterBackend,
+        FilteringFilterBackend,
+        OrderingFilterBackend,
+        GeoSpatialFilteringFilterBackend,
+        GeoSpatialOrderingFilterBackend,
+    ]
+    
+    search_fields = ('produit', 'description', 'type_production')
+    filter_fields = {
+        'type_production': 'type_production',
+        'certification': 'certification',
+        'disponible': 'disponible',
+    }
+    ordering_fields = {
+        'prix_unitaire': 'prix_unitaire',
+        'date_creation': 'date_creation',
+    }
+    geo_spatial_filter_fields = {
+        'localisation': {
+            'lookups': ['geo_distance'],
+        },
+    }
+
+
+class CommandeViewSet(viewsets.ModelViewSet):
+    """Gestion des commandes"""
     serializer_class = CommandeSerializer
     permission_classes = [IsAuthenticated, IsCommandeOwner]
     
     def get_queryset(self):
         user = self.request.user
-        if user.is_producteur and hasattr(user, 'producteur'):
-            # Producteur voit ses ventes
+        if hasattr(user, 'producteur'):
             return Commande.objects.filter(
                 production__producteur=user.producteur
             ).select_related('production__producteur__user', 'client')
-        # Client voit ses achats
         return user.commandes_production.select_related('production__producteur__user')
     
-    def perform_create(self, serializer):
-        commande = serializer.save(client=self.request.user)
-        
-        # Notification producteur
-        from apps.notifications.services import NotificationService
-        NotificationService.notify_producteur_new_order(commande)
-
-
-class CommandeRetrieveUpdateView(generics.RetrieveUpdateAPIView):
-    """Détail et actions sur commande"""
-    queryset = Commande.objects.all()
-    serializer_class = CommandeSerializer
-    permission_classes = [IsAuthenticated, IsCommandeOwner]
+    @LIST_COMMANDES_SCHEMA
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
     
+    @CREATE_COMMANDE_SCHEMA
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+    
+    def perform_create(self, serializer):
+        serializer.save(client=self.request.user)
+        
+        from apps.notifications.services import NotificationService
+        commande = serializer.instance
+        NotificationService.notify_producteur_new_order(commande)
+    
+    @CONFIRM_COMMANDE_SCHEMA
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
+        """Producteur confirme la commande"""
         commande = self.get_object()
         
-        if not request.user.is_producteur:
+        if not hasattr(request.user, 'producteur'):
             return Response({'error': 'Producteur uniquement'}, status=403)
         
         commande.statut = 'confirmee'
-        commande.save(update_fields=['statut', 'date_confirmation'])
+        commande.date_confirmation = timezone.now()
+        commande.save()
         
         from apps.notifications.services import NotificationService
         NotificationService.notify_consommateur_order_confirmed(commande)
         
         return Response({'status': 'confirmée'})
     
-    @action(detail=True, methods=['post']) 
+    @CANCEL_COMMANDE_SCHEMA
+    @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
+        """Annuler commande"""
         commande = self.get_object()
         commande.statut = 'annulee'
-        commande.save(update_fields=['statut'])
+        commande.save()
         
         from apps.notifications.services import NotificationService
         NotificationService.notify_order_cancelled(commande, request.user)
         
         return Response({'status': 'annulée'})
+    
+    @SHIP_COMMANDE_SCHEMA
+    @action(detail=True, methods=['post'])
+    def ship(self, request, pk=None):
+        """Producteur marque comme expédiée"""
+        commande = self.get_object()
+        
+        if not hasattr(request.user, 'producteur'):
+            return Response({'error': 'Producteur uniquement'}, status=403)
+        
+        commande.statut = 'expediee'
+        commande.date_expedition = timezone.now()
+        commande.save()
+        
+        from apps.notifications.services import NotificationService
+        NotificationService.notify_consommateur_product_shipped(commande)
+        
+        return Response({'status': 'expédiée'})
+    
+    @DELIVER_COMMANDE_SCHEMA
+    @action(detail=True, methods=['post'])
+    def deliver(self, request, pk=None):
+        """Marquer comme livrée"""
+        commande = self.get_object()
+        commande.statut = 'livree'
+        commande.date_livraison = timezone.now()
+        commande.save()
+        
+        from apps.notifications.services import NotificationService
+        NotificationService.notify_consommateur_delivery_completed(commande)
+        NotificationService.notify_producteur_delivery_completed(commande)
+        
+        return Response({'status': 'livrée'})
 
 
-class EvaluationCreateView(generics.CreateAPIView):
-    """Créer une évaluation après livraison"""
+class PaiementViewSet(viewsets.ModelViewSet):
+    """Gestion des paiements"""
+    serializer_class = PaiementSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return Paiement.objects.filter(commande__client=self.request.user)
+    
+    @INITIATE_PAIEMENT_SCHEMA
+    @action(detail=False, methods=['post'])
+    def initiate(self, request):
+        """Initier paiement mobile money"""
+        return Response({'message': 'Paiement initié'}, status=201)
+    
+    @CALLBACK_PAIEMENT_SCHEMA
+    @action(detail=False, methods=['post'])
+    def callback(self, request):
+        """Webhook mobile money"""
+        return Response({'status': 'received'})
+
+
+class EvaluationViewSet(viewsets.ModelViewSet):
+    """Gestion des évaluations"""
     serializer_class = EvaluationSerializer
     permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return Evaluation.objects.filter(commande__client=self.request.user)
+    
+    @CREATE_EVALUATION_SCHEMA
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
     
     def perform_create(self, serializer):
         evaluation = serializer.save()
         
-        # Notification producteur
         from apps.notifications.services import NotificationService
         NotificationService.notify_producteur_review(evaluation)
