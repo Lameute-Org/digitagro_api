@@ -39,15 +39,11 @@ class ProductionViewSet(viewsets.ModelViewSet):
         ).prefetch_related('photos').all()
     
     def get_serializer_class(self):
-        # Pour la création uniquement
         if self.action == 'create':
-            # Si pas encore producteur, utiliser le serializer avec champs producteur
             if not self.request.user.is_producteur:
                 return ProductionCreateWithRoleSerializer
-            # Si déjà producteur, utiliser le serializer normal
             return ProductionDetailSerializer
         
-        # Pour les autres actions (list, retrieve, update)
         return ProductionDetailSerializer if self.action == 'retrieve' else ProductionListSerializer
         
     def get_permissions(self):
@@ -69,26 +65,23 @@ class ProductionViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def mine(self, request):
         """Liste des productions de l'utilisateur connecté"""
-        # Vérifier si l'utilisateur est producteur
         if not request.user.is_producteur or not hasattr(request.user, 'producteur'):
             return Response(
                 {'error': 'Vous devez être producteur pour accéder à cette ressource'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # Filtrer les productions du producteur connecté
         my_productions = Production.objects.filter(
             producteur=request.user.producteur
         ).select_related('producteur__user').prefetch_related('photos')
         
-        # Paginer les résultats
         page = self.paginate_queryset(my_productions)
         if page is not None:
             serializer = ProductionListSerializer(page, many=True, context={'request': request})
             return self.get_paginated_response(serializer.data)
         
         serializer = ProductionListSerializer(my_productions, many=True, context={'request': request})
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
     @LIST_PRODUCTIONS_SCHEMA
     def list(self, request, *args, **kwargs):
@@ -97,28 +90,23 @@ class ProductionViewSet(viewsets.ModelViewSet):
     @CREATE_PRODUCTION_SCHEMA
     def create(self, request, *args, **kwargs):
         """Création de production avec activation automatique du rôle producteur"""
-        # Vérification profil complété
         if not request.user.profile_completed:
             return Response(
                 {'error': 'Complétez votre profil (nom, prénom, téléphone, adresse) avant de vendre'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Si pas encore producteur, activer avec les champs fournis
         if not request.user.is_producteur:
             serializer = ProductionCreateWithRoleSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             
             with transaction.atomic():
-                # Extraction des données pour le profil producteur
                 type_production = serializer.validated_data.pop('type_production')
                 superficie = serializer.validated_data.pop('superficie', None)
                 certification = serializer.validated_data.pop('certification', '')
                 
-                # Activation rôle producteur
                 request.user.activate_role('producteur')
                 
-                # Création profil producteur
                 producteur = Producteur.objects.create(
                     user=request.user,
                     type_production=type_production,
@@ -126,29 +114,32 @@ class ProductionViewSet(viewsets.ModelViewSet):
                     certification=certification
                 )
                 
-                # Création production
                 production = Production.objects.create(
                     producteur=producteur,
                     **serializer.validated_data
                 )
                 
             return Response(
-                ProductionDetailSerializer(production).data,
+                {
+                    'message': 'Production créée avec succès. Vous êtes maintenant producteur.',
+                    'production': ProductionDetailSerializer(production).data
+                },
                 status=status.HTTP_201_CREATED
             )
         
-        # ✅ Si déjà producteur : utiliser get_serializer() qui appellera get_serializer_class()
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         
         return Response(
-            ProductionDetailSerializer(serializer.instance).data,
+            {
+                'message': 'Production créée avec succès',
+                'production': ProductionDetailSerializer(serializer.instance).data
+            },
             status=status.HTTP_201_CREATED
         )
 
     def perform_create(self, serializer):
-        """Méthode appelée après validation pour sauvegarder"""
         serializer.save(producteur=self.request.user.producteur)    
     
     @NEARBY_PRODUCTIONS_SCHEMA
@@ -160,7 +151,10 @@ class ProductionViewSet(viewsets.ModelViewSet):
         radius = float(request.query_params.get('radius', 10))
         
         if not (lat and lon):
-            return Response({'error': 'lat et lon requis'}, status=400)
+            return Response(
+                {'error': 'Paramètres lat et lon requis'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         lat, lon = float(lat), float(lon)
         
@@ -170,7 +164,14 @@ class ProductionViewSet(viewsets.ModelViewSet):
         ]
         
         serializer = self.get_serializer(productions, many=True)
-        return Response(serializer.data)
+        return Response(
+            {
+                'count': len(productions),
+                'radius_km': radius,
+                'results': serializer.data
+            },
+            status=status.HTTP_200_OK
+        )
     
     @staticmethod
     def _haversine_distance(lat1, lon1, lat2, lon2):
@@ -190,18 +191,31 @@ class ProductionViewSet(viewsets.ModelViewSet):
         """Upload photo production (max 5 par production)"""
         production = self.get_object()
         
-        # Vérifier que l'utilisateur est le propriétaire
         if production.producteur.user != request.user:
-            return Response({'error': 'Non autorisé'}, status=403)
+            return Response(
+                {'error': 'Non autorisé à modifier cette production'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
         
         if production.photos.count() >= 5:
-            return Response({'error': 'Maximum 5 photos'}, status=400)
+            return Response(
+                {'error': 'Maximum 5 photos par production'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         serializer = PhotoProductionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(production=production, ordre=production.photos.count())
         
-        return Response(serializer.data, status=201)
+        return Response(
+            {
+                'message': 'Photo ajoutée avec succès',
+                'photo': serializer.data
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
 class ProductionSearchViewSet(DocumentViewSet):
     """Recherche avancée avec Elasticsearch"""
     document = ProductionDocument
@@ -261,7 +275,6 @@ class CommandeViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         commande = serializer.save(client=self.request.user)
         
-        # Notification producteur
         from apps.notifications.services import NotificationService
         NotificationService.create(
             recipient=commande.production.producteur.user,
@@ -278,7 +291,10 @@ class CommandeViewSet(viewsets.ModelViewSet):
         commande = self.get_object()
         
         if not hasattr(request.user, 'producteur'):
-            return Response({'error': 'Producteur uniquement'}, status=403)
+            return Response(
+                {'error': 'Action réservée aux producteurs'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
         
         commande.statut = 'confirmee'
         commande.date_confirmation = timezone.now()
@@ -293,7 +309,14 @@ class CommandeViewSet(viewsets.ModelViewSet):
             content_object=commande
         )
         
-        return Response({'status': 'confirmée'})
+        return Response(
+            {
+                'message': 'Commande confirmée avec succès',
+                'statut': 'confirmee',
+                'date_confirmation': commande.date_confirmation
+            },
+            status=status.HTTP_200_OK
+        )
     
     @CANCEL_COMMANDE_SCHEMA
     @action(detail=True, methods=['post'])
@@ -303,7 +326,6 @@ class CommandeViewSet(viewsets.ModelViewSet):
         commande.save()
         
         from apps.notifications.services import NotificationService
-        # Notifier l'autre partie
         other_user = commande.production.producteur.user if request.user == commande.client else commande.client
         NotificationService.create(
             recipient=other_user,
@@ -313,7 +335,13 @@ class CommandeViewSet(viewsets.ModelViewSet):
             content_object=commande
         )
         
-        return Response({'status': 'annulée'})
+        return Response(
+            {
+                'message': 'Commande annulée avec succès',
+                'statut': 'annulee'
+            },
+            status=status.HTTP_200_OK
+        )
     
     @SHIP_COMMANDE_SCHEMA
     @action(detail=True, methods=['post'])
@@ -321,7 +349,10 @@ class CommandeViewSet(viewsets.ModelViewSet):
         commande = self.get_object()
         
         if not hasattr(request.user, 'producteur'):
-            return Response({'error': 'Producteur uniquement'}, status=403)
+            return Response(
+                {'error': 'Action réservée aux producteurs'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
         
         commande.statut = 'expediee'
         commande.date_expedition = timezone.now()
@@ -336,7 +367,14 @@ class CommandeViewSet(viewsets.ModelViewSet):
             content_object=commande
         )
         
-        return Response({'status': 'expédiée'})
+        return Response(
+            {
+                'message': 'Commande expédiée avec succès',
+                'statut': 'expediee',
+                'date_expedition': commande.date_expedition
+            },
+            status=status.HTTP_200_OK
+        )
     
     @DELIVER_COMMANDE_SCHEMA
     @action(detail=True, methods=['post'])
@@ -348,7 +386,6 @@ class CommandeViewSet(viewsets.ModelViewSet):
         
         from apps.notifications.services import NotificationService
         
-        # Notification client
         NotificationService.create(
             recipient=commande.client,
             notif_type='delivery_completed',
@@ -357,7 +394,6 @@ class CommandeViewSet(viewsets.ModelViewSet):
             content_object=commande
         )
         
-        # Notification producteur
         NotificationService.create(
             recipient=commande.production.producteur.user,
             notif_type='delivery_completed',
@@ -366,7 +402,16 @@ class CommandeViewSet(viewsets.ModelViewSet):
             content_object=commande
         )
         
-        return Response({'status': 'livrée'})
+        return Response(
+            {
+                'message': 'Livraison confirmée avec succès',
+                'statut': 'livree',
+                'date_livraison': commande.date_livraison
+            },
+            status=status.HTTP_200_OK
+        )
+
+
 class PaiementViewSet(viewsets.ModelViewSet):
     """Gestion des paiements"""
     serializer_class = PaiementSerializer
@@ -379,13 +424,22 @@ class PaiementViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def initiate(self, request):
         """Initier paiement mobile money"""
-        return Response({'message': 'Paiement initié'}, status=201)
+        return Response(
+            {'message': 'Paiement initié avec succès'}, 
+            status=status.HTTP_201_CREATED
+        )
     
     @CALLBACK_PAIEMENT_SCHEMA
     @action(detail=False, methods=['post'])
     def callback(self, request):
         """Webhook mobile money"""
-        return Response({'status': 'received'})
+        return Response(
+            {
+                'message': 'Callback reçu avec succès',
+                'status': 'received'
+            },
+            status=status.HTTP_200_OK
+        )
 
 
 class EvaluationViewSet(viewsets.ModelViewSet):
@@ -403,10 +457,9 @@ class EvaluationViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         evaluation = serializer.save()
         
-        # ✅ CORRECTION : Utiliser NotificationService.create() directement
         from apps.notifications.services import NotificationService
         NotificationService.create(
-            recipient=evaluation.commande.production.producteur.user,  # Accès via commande → production → producteur
+            recipient=evaluation.commande.production.producteur.user,
             notif_type='new_review',
             title='Nouvelle évaluation',
             message=f'{evaluation.note}/5 étoiles - {evaluation.commentaire[:50]}',

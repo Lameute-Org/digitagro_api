@@ -63,8 +63,8 @@ print(f"{Colors.YELLOW}{'='*60}{Colors.END}\n")
 # ==================== 1. INSCRIPTION ====================
 print(f"\n{Colors.GREEN}1️⃣  INSCRIPTION{Colors.END}")
 result = api_call('POST', '/api/auth/register/', {
-    "email": "davyem4@gmail.com",
-    "telephone": "+237652179014",
+    "email": "davyem@gmail.com",
+    "telephone": "+237752179014",
     "nom": "EMANE",
     "prenom": "Davy",
     "adresse": "Yaoundé, Cameroun",
