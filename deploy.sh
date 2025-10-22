@@ -5,9 +5,8 @@ APP_DIR="/home/digitagro/digitagro_api"
 cd "$APP_DIR"
 
 echo "📥 [GIT] Pull des dernières modifications..."
-git reset --hard HEAD  # ← AJOUTER
-git clean -fd          # ← AJOUTER
-git pull origin main
+git fetch origin main
+git reset --hard origin/main
 
 echo "🐳 [DOCKER] Nettoyage des anciens conteneurs..."
 docker ps -a --filter "name=digitagro_api" -q | xargs -r docker rm -f || true
