@@ -555,3 +555,235 @@ GOOGLE_AUTH_SCHEMA = extend_schema(
     },
     tags=[TAG_SOCIAL_AUTH]
 )
+
+PHONE_VERIFICATION_REQUEST_SCHEMA = extend_schema(
+    operation_id="phone_request_code",
+    summary="Demander code SMS",
+    description="""
+    Envoie un code de vérification à 5 chiffres par SMS via Twilio.
+    
+    **Limitations :**
+    - 3 tentatives maximum par heure
+    - Code valide 5 minutes
+    - Numéro camerounais uniquement (+237)
+    
+    **Formats acceptés :**
+    - +237XXXXXXXXX (international)
+    - 6XXXXXXXX ou 2XXXXXXXX (local)
+    """,
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'phone_number': {
+                    'type': 'string',
+                    'example': '+237690123456',
+                    'description': 'Numéro au format international ou local'
+                }
+            },
+            'required': ['phone_number']
+        }
+    },
+    examples=[
+        OpenApiExample(
+            name='Format international',
+            value={'phone_number': '+237690123456'}
+        ),
+        OpenApiExample(
+            name='Format local',
+            value={'phone_number': '690123456'}
+        )
+    ],
+    responses={
+        200: {
+            'description': 'Code SMS envoyé avec succès',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'message': 'Code envoyé avec succès',
+                        'phone_number': '+237690123456',
+                        'expires_in': 300,
+                        'can_resend_at': '2024-01-15T10:37:00Z'
+                    }
+                }
+            }
+        },
+        400: {
+            'description': 'Numéro invalide ou déjà vérifié',
+            'content': {
+                'application/json': {
+                    'examples': {
+                        'invalid_format': {
+                            'value': {
+                                'error': 'Numéro de téléphone invalide',
+                                'format_attendu': '+237XXXXXXXXX ou 6XXXXXXXX'
+                            }
+                        },
+                        'already_verified': {
+                            'value': {
+                                'error': 'Ce numéro est déjà vérifié par un autre compte'
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        429: {
+            'description': 'Trop de tentatives - Rate limit atteint',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'error': 'Trop de tentatives. Réessayez dans 1 heure.',
+                        'retry_after': '2024-01-15T11:35:00Z',
+                        'attempts_remaining': 0
+                    }
+                }
+            }
+        },
+        500: {
+            'description': 'Erreur envoi SMS (Twilio)',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'error': 'Erreur envoi SMS : Unable to create record',
+                        'details': 'Vérifiez votre numéro ou contactez le support'
+                    }
+                }
+            }
+        }
+    },
+    tags=['Phone Verification']
+)
+
+
+PHONE_VERIFICATION_CODE_SCHEMA = extend_schema(
+    operation_id="phone_verify_code",
+    summary="Vérifier code SMS",
+    description="""
+    Valide le code à 5 chiffres reçu par SMS.
+    
+    **Limitations :**
+    - 3 tentatives maximum par code
+    - Code expire après 5 minutes
+    
+    **Succès :**
+    - Marque le téléphone comme vérifié
+    - Débloque la création de productions
+    """,
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'code': {
+                    'type': 'string',
+                    'minLength': 5,
+                    'maxLength': 5,
+                    'example': '12345',
+                    'description': 'Code 5 chiffres reçu par SMS'
+                }
+            },
+            'required': ['code']
+        }
+    },
+    responses={
+        200: {
+            'description': 'Téléphone vérifié avec succès',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'message': 'Téléphone vérifié avec succès',
+                        'phone_verified': True,
+                        'can_become_producer': True,
+                        'verified_at': '2024-01-15T10:35:00Z'
+                    }
+                }
+            }
+        },
+        400: {
+            'description': 'Code invalide, expiré ou trop de tentatives',
+            'content': {
+                'application/json': {
+                    'examples': {
+                        'no_verification': {
+                            'value': {
+                                'error': 'Aucune vérification en cours',
+                                'action': 'Demandez un nouveau code'
+                            }
+                        },
+                        'expired': {
+                            'value': {
+                                'error': 'Code expiré',
+                                'action': 'Demandez un nouveau code'
+                            }
+                        },
+                        'too_many_attempts': {
+                            'value': {
+                                'error': 'Trop de tentatives',
+                                'action': 'Demandez un nouveau code'
+                            }
+                        },
+                        'incorrect_code': {
+                            'value': {
+                                'error': 'Code incorrect',
+                                'attempts_remaining': 2
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    tags=['Phone Verification']
+)
+
+USER_BADGES_SCHEMA = extend_schema(
+    operation_id="get_user_badges",
+    summary="Mes badges",
+    description="""
+    Liste des badges actifs de l'utilisateur connecté.
+    
+    **Badges automatiques :**
+    - 📱 Téléphone Vérifié : Après vérification SMS
+    - 🏢 Membre GIC/Coopérative : Si membre d'une organisation
+    
+    **Badges futurs (réputation) :**
+    - ⭐ Top Vendeur : 50+ ventes avec note 4.5+
+    - ⚡ Livraison Express : 95%+ ponctualité
+    - 🎖️ Vétéran : 1 an+ d'ancienneté
+    """,
+    responses={
+        200: {
+            'description': 'Badges de l\'utilisateur',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'badges': [
+                            {
+                                'type': 'phone_verified',
+                                'name': '📱 Téléphone Vérifié',
+                                'icon': '📱',
+                                'awarded_at': '2024-01-15T10:30:00Z',
+                                'metadata': {
+                                    'verified_at': '2024-01-15T10:30:00Z'
+                                }
+                            },
+                            {
+                                'type': 'organization_member',
+                                'name': '🏢 Membre GIC/Coopérative',
+                                'icon': '🏢',
+                                'awarded_at': '2024-01-15T10:35:00Z',
+                                'metadata': {
+                                    'organization_type': 'GIC',
+                                    'organization_name': 'GIC ESPOIR AGRICOLE'
+                                }
+                            }
+                        ],
+                        'total_badges': 2
+                    }
+                }
+            }
+        },
+        401: {'description': 'Non authentifié'}
+    },
+    tags=['Badges']
+)

@@ -6,26 +6,87 @@ from .models import PhotoEvaluation, Production, PhotoProduction, Commande, Paie
 
 class ProductionCreateWithRoleSerializer(serializers.ModelSerializer):
     """Serializer pour première production avec activation producteur"""
-    # Champs producteur requis à la première production
+    
+    # Champs producteur
     type_production = serializers.CharField(max_length=100, write_only=True)
-    superficie = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, write_only=True)
-    certification = serializers.CharField(max_length=100, required=False, write_only=True, default='standard')
+    superficie = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        required=False,
+        write_only=True
+    )
+    certification = serializers.CharField(
+        max_length=100,
+        required=False,
+        write_only=True,
+        default='standard'
+    )
+    
+    # ========== CHAMPS GIC/COOPÉRATIVE ==========
+    is_in_gic = serializers.BooleanField(required=False, default=False, write_only=True)
+    gic_name = serializers.CharField(
+        max_length=200,
+        required=False,
+        allow_blank=True,
+        write_only=True
+    )
+    gic_registration_number = serializers.CharField(
+        max_length=50,
+        required=False,
+        allow_blank=True,
+        write_only=True
+    )
+    
+    is_in_cooperative = serializers.BooleanField(required=False, default=False, write_only=True)
+    cooperative_name = serializers.CharField(
+        max_length=200,
+        required=False,
+        allow_blank=True,
+        write_only=True
+    )
+    cooperative_registration_number = serializers.CharField(
+        max_length=50,
+        required=False,
+        allow_blank=True,
+        write_only=True
+    )
     
     class Meta:
         model = Production
         fields = [
-            'produit', 'type_production', 'quantite', 'unite_mesure', 
+            # Production
+            'produit', 'type_production', 'quantite', 'unite_mesure',
             'prix_unitaire', 'latitude', 'longitude', 'adresse_complete',
-            'date_recolte', 'date_expiration', 'description', 
-            'conditions_stockage', 'certification', 'superficie'
+            'date_recolte', 'date_expiration', 'description',
+            'conditions_stockage', 'certification', 'superficie',
+            
+            # GIC/Coopérative
+            'is_in_gic', 'gic_name', 'gic_registration_number',
+            'is_in_cooperative', 'cooperative_name', 'cooperative_registration_number'
         ]
     
     def validate(self, attrs):
-        """Vérification que les champs producteur sont présents"""
+        """Validation avec vérification téléphone obligatoire"""
+        user = self.context['request'].user
+        
+        # Vérification prérequis producteur
+        can_produce, error_msg = user.check_producer_requirements()
+        if not can_produce:
+            raise ValidationError(error_msg)
+        
+        # Validation type production
         if not attrs.get('type_production'):
-            raise ValidationError('Le type de production est requis pour devenir producteur')
+            raise ValidationError('Le type de production est requis')
+        
+        # Validation GIC
+        if attrs.get('is_in_gic') and not attrs.get('gic_name'):
+            raise ValidationError('Le nom du GIC est requis si vous êtes membre d\'un GIC')
+        
+        # Validation Coopérative
+        if attrs.get('is_in_cooperative') and not attrs.get('cooperative_name'):
+            raise ValidationError('Le nom de la coopérative est requis si vous êtes membre')
+        
         return attrs
-
 
 class PhotoProductionSerializer(serializers.ModelSerializer):
     class Meta:

@@ -10,6 +10,9 @@ from django_elasticsearch_dsl_drf.filter_backends import (
     SearchFilterBackend, FilteringFilterBackend, OrderingFilterBackend,
     GeoSpatialFilteringFilterBackend, GeoSpatialOrderingFilterBackend
 )
+
+from apps.users.serializers import UserProfileSerializer
+from apps.users.services import BadgeService
 from .models import Production, Commande, Paiement, Evaluation, PhotoProduction
 from .serializers import (
     ProductionListSerializer, ProductionDetailSerializer, 
@@ -89,56 +92,83 @@ class ProductionViewSet(viewsets.ModelViewSet):
     
     @CREATE_PRODUCTION_SCHEMA
     def create(self, request, *args, **kwargs):
-        """Création de production avec activation automatique du rôle producteur"""
-        if not request.user.profile_completed:
+        """Création production avec vérifications renforcées et badges automatiques"""
+        
+        # Vérification profil + téléphone
+        can_produce, error_msg = request.user.check_producer_requirements()
+        if not can_produce:
             return Response(
-                {'error': 'Complétez votre profil (nom, prénom, téléphone, adresse) avant de vendre'},
+                {'error': error_msg},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Si pas encore producteur
         if not request.user.is_producteur:
-            serializer = ProductionCreateWithRoleSerializer(data=request.data)
+            serializer = ProductionCreateWithRoleSerializer(
+                data=request.data,
+                context={'request': request}
+            )
             serializer.is_valid(raise_exception=True)
             
             with transaction.atomic():
+                # Extraction données production
                 type_production = serializer.validated_data.pop('type_production')
                 superficie = serializer.validated_data.pop('superficie', None)
-                certification = serializer.validated_data.pop('certification', '')
+                certification = serializer.validated_data.pop('certification', 'standard')
                 
+                # Extraction données GIC/Coopérative
+                is_in_gic = serializer.validated_data.pop('is_in_gic', False)
+                gic_name = serializer.validated_data.pop('gic_name', '')
+                gic_registration_number = serializer.validated_data.pop('gic_registration_number', '')
+                
+                is_in_cooperative = serializer.validated_data.pop('is_in_cooperative', False)
+                cooperative_name = serializer.validated_data.pop('cooperative_name', '')
+                cooperative_registration_number = serializer.validated_data.pop('cooperative_registration_number', '')
+                
+                # Activation rôle producteur
                 request.user.activate_role('producteur')
                 
+                # Création profil producteur
                 producteur = Producteur.objects.create(
                     user=request.user,
                     type_production=type_production,
                     superficie=superficie,
-                    certification=certification
+                    certification=certification,
+                    is_in_gic=is_in_gic,
+                    gic_name=gic_name,
+                    gic_registration_number=gic_registration_number,
+                    is_in_cooperative=is_in_cooperative,
+                    cooperative_name=cooperative_name,
+                    cooperative_registration_number=cooperative_registration_number
                 )
                 
+                # Création production
                 production = Production.objects.create(
                     producteur=producteur,
                     **serializer.validated_data
                 )
                 
-            return Response(
-                {
-                    'message': 'Production créée avec succès. Vous êtes maintenant producteur.',
-                    'production': ProductionDetailSerializer(production).data
-                },
-                status=status.HTTP_201_CREATED
-            )
+                # ========== ATTRIBUTION BADGES AUTOMATIQUES ==========
+                badges = BadgeService.check_and_award_automatic_badges(request.user)
+            
+            # Recharger utilisateur avec badges
+            request.user.refresh_from_db()
+            
+            return Response({
+                'message': 'Production créée avec succès. Vous êtes maintenant producteur.',
+                'production': ProductionDetailSerializer(production).data,
+                'badges': BadgeService.get_user_badges_summary(request.user)
+            }, status=status.HTTP_201_CREATED)
         
+        # Déjà producteur - création normale
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         
-        return Response(
-            {
-                'message': 'Production créée avec succès',
-                'production': ProductionDetailSerializer(serializer.instance).data
-            },
-            status=status.HTTP_201_CREATED
-        )
-
+        return Response({
+            'message': 'Production créée avec succès',
+            'production': ProductionDetailSerializer(serializer.instance).data
+        }, status=status.HTTP_201_CREATED)
     def perform_create(self, serializer):
         serializer.save(producteur=self.request.user.producteur)    
     

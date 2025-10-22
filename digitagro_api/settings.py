@@ -298,3 +298,13 @@ FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:3000')
 
 # MongoDB configuration for future chat module
 MONGODB_URL = env('MONGODB_URL', default='mongodb://localhost:27017/digitagro_chat')
+
+# ========== TWILIO CONFIGURATION ==========
+TWILIO_ACCOUNT_SID = env('TWILIO_ACCOUNT_SID')
+TWILIO_AUTH_TOKEN = env('TWILIO_AUTH_TOKEN')
+TWILIO_PHONE_NUMBER = env('TWILIO_PHONE_NUMBER')  # Numéro Twilio
+
+# ========== DOCUMENTS STORAGE ==========
+# Utiliser stockage sécurisé pour documents privés
+# En production : AWS S3 privé ou équivalent
+PRIVATE_MEDIA_ROOT = BASE_DIR / 'media' / 'private'
