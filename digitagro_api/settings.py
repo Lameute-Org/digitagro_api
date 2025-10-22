@@ -169,19 +169,12 @@ SPECTACULAR_SETTINGS = {
 
 
 # Elasticsearch
-if DEBUG:
-    ELASTICSEARCH_DSL = {
-        'default': {
-            'hosts': 'http://localhost:9200'
-        },
+ELASTICSEARCH_DSL = {
+    'default': {
+        'hosts': env('ELASTICSEARCH_DSL_HOSTS', 
+                     default='http://localhost:9200' if DEBUG else 'http://185.217.125.37:9200')
     }
-else:
-    ELASTICSEARCH_DSL = {
-        'default': {
-            'hosts': 'http://185.217.125.37:9200'
-        },
-    }
-
+}
 # Custom User Model
 AUTH_USER_MODEL = 'users.CustomUser'
 

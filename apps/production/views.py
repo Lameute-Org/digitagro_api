@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.db import transaction
 from django_elasticsearch_dsl_drf.viewsets import DocumentViewSet
 from django_elasticsearch_dsl_drf.filter_backends import (
-    SearchFilterBackend, FilteringFilterBackend, OrderingFilterBackend,
+    CompoundSearchFilterBackend, FilteringFilterBackend, OrderingFilterBackend,
     GeoSpatialFilteringFilterBackend, GeoSpatialOrderingFilterBackend
 )
 
@@ -253,7 +253,7 @@ class ProductionSearchViewSet(DocumentViewSet):
     permission_classes = [AllowAny]
     
     filter_backends = [
-        SearchFilterBackend,
+        CompoundSearchFilterBackend,
         FilteringFilterBackend,
         OrderingFilterBackend,
         GeoSpatialFilteringFilterBackend,

@@ -111,8 +111,12 @@ class ProductionListSerializer(serializers.ModelSerializer):
         ]
     
     def get_photo_principale(self, obj):
-        photo = obj.photos.first()
-        return self.context['request'].build_absolute_uri(photo.image.url) if photo else None
+        if hasattr(obj, "photos"):  # Cas d'un objet Django ORM
+            photo = obj.photos.first()
+            if photo:
+                return photo.image.url
+        # Cas d'un Hit Elastic
+        return getattr(obj, "photo_principale", None)
 
 
 class ProductionDetailSerializer(serializers.ModelSerializer):

@@ -1,7 +1,7 @@
-# ==================== apps/production/documents.py (Elasticsearch) ====================
 from django_elasticsearch_dsl import Document, fields
 from django_elasticsearch_dsl.registries import registry
 from .models import Production
+
 
 @registry.register_document
 class ProductionDocument(Document):
@@ -11,16 +11,21 @@ class ProductionDocument(Document):
         'prenom': fields.TextField(),
         'type_production': fields.TextField(),
     })
-    
+
+    # ✅ Ajout de latitude et longitude pour le serializer DRF
+    latitude = fields.FloatField(attr='latitude')
+    longitude = fields.FloatField(attr='longitude')
+
+    # ✅ Le champ de géolocalisation complet pour Elasticsearch
     localisation = fields.GeoPointField()
-    
+
     class Index:
         name = 'productions'
         settings = {
             'number_of_shards': 1,
-            'number_of_replicas': 0
+            'number_of_replicas': 0,
         }
-    
+
     class Django:
         model = Production
         fields = [
@@ -36,14 +41,16 @@ class ProductionDocument(Document):
             'description',
             'date_creation',
         ]
-    
+
     def prepare_localisation(self, instance):
+        """Construit le champ GeoPointField pour Elasticsearch."""
         return {
             'lat': float(instance.latitude),
-            'lon': float(instance.longitude)
+            'lon': float(instance.longitude),
         }
-    
+
     def prepare_producteur(self, instance):
+        """Données imbriquées du producteur."""
         return {
             'id': instance.producteur.user.id,
             'nom': instance.producteur.user.nom,

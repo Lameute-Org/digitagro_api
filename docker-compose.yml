@@ -20,14 +20,15 @@ services:
       - DB_NAME=digitagro_db
       - DB_USER=digitagro
       - DB_PASSWORD=Digitagro@2002
-      - REDIS_HOST=redis  # ← Nouveau
-      - REDIS_PORT=6379   # ← Nouveau
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ELASTICSEARCH_DSL_HOSTS=http://elasticsearch:9200  # ← AJOUTER
     depends_on:
-      - redis  # ← Nouveau
+      - redis
+      - elasticsearch  # ← AJOUTER
     networks:
       - digitagro_network
 
-  # ← Ajouter Redis
   redis:
     image: redis:7-alpine
     container_name: digitagro_redis
@@ -39,10 +40,27 @@ services:
       - digitagro_network
     restart: always
 
+  # ← NOUVEAU SERVICE
+  elasticsearch:
+    image: elasticsearch:7.17.9
+    container_name: digitagro_elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - digitagro_network
+    restart: always
+
 volumes:
   static_volume:
   media_volume:
-  redis_data:  # ← Nouveau
+  redis_data:
+  es_data:  # ← AJOUTER
 
 networks:
   digitagro_network:

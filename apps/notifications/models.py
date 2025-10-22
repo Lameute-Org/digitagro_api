@@ -3,6 +3,7 @@ from django.db import models
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from apps.users.models import CustomUser
+from rest_framework.decorators import action
 
 class Notification(models.Model):
     TYPE_CHOICES = [
@@ -73,7 +74,8 @@ class Notification(models.Model):
     
     def __str__(self):
         return f"{self.get_type_display()} - {self.recipient.email}"
-    
+
+    @action(detail=True, methods=['post'])
     def mark_as_read(self):
         if not self.is_read:
             self.is_read = True

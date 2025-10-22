@@ -3,7 +3,7 @@ import requests
 import json
 from datetime import date, timedelta
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://127.0.0.1:8001/"
 token = None
 
 class Colors:
@@ -39,7 +39,7 @@ def api_call(method, endpoint, data=None):
         return None
 
 TEST_USER = {
-    "email": "davy@digitagro.cm",
+    "email": "davyemane@digitagro.cm",
     "telephone": "+237676469014",
     "nom": "EMANE",
     "prenom": "Davy",
@@ -203,7 +203,7 @@ if prod_id1:
 # ==================== 16. COMMANDE 1 ====================
 if prod_id1:
     print(f"\n{Colors.GREEN}1️⃣6️⃣  CRÉATION COMMANDE #1{Colors.END}")
-    cmd1 = api_call('POST', '/api/commandes/', {
+    cmd1 = api_call('POST', '/api/productions/commandes/', {
         "production": prod_id1,
         "quantite": 50,
         "adresse_livraison": "Douala, Akwa Nord, Rue Joffre, Immeuble SOCOPAO",
@@ -219,7 +219,7 @@ if prod_id1:
 # ==================== 17. COMMANDE 2 ====================
 if prod_id2:
     print(f"\n{Colors.GREEN}1️⃣7️⃣  CRÉATION COMMANDE #2{Colors.END}")
-    cmd2 = api_call('POST', '/api/commandes/', {
+    cmd2 = api_call('POST', '/api/productions/commandes/', {
         "production": prod_id2,
         "quantite": 30,
         "adresse_livraison": "Yaoundé, Bastos, près de l'ambassade",
@@ -231,33 +231,33 @@ if prod_id2:
 
 # ==================== 18. LISTE COMMANDES ====================
 print(f"\n{Colors.GREEN}1️⃣8️⃣  LISTE DE MES COMMANDES{Colors.END}")
-api_call('GET', '/api/commandes/')
+api_call('GET', '/api/productions/commandes/')
 
 # ==================== 19. WORKFLOW COMMANDE 1 ====================
 if cmd_id1:
     print(f"\n{Colors.GREEN}1️⃣9️⃣  WORKFLOW COMMANDE #1{Colors.END}")
     
     print(f"\n{Colors.CYAN}→ Confirmation par producteur{Colors.END}")
-    api_call('POST', f'/api/commandes/{cmd_id1}/confirm/')
+    api_call('POST', f'/api/productions/commandes/{cmd_id1}/confirm/')
     
     print(f"\n{Colors.CYAN}→ Expédition{Colors.END}")
-    api_call('POST', f'/api/commandes/{cmd_id1}/ship/')
-    
+    api_call('POST', f'/api/productions/commandes/{cmd_id1}/ship/')
+
     print(f"\n{Colors.CYAN}→ Livraison{Colors.END}")
-    api_call('POST', f'/api/commandes/{cmd_id1}/deliver/')
+    api_call('POST', f'/api/productions/commandes/{cmd_id1}/deliver/')
 
 # ==================== 20. WORKFLOW COMMANDE 2 ====================
 if cmd_id2:
     print(f"\n{Colors.GREEN}2️⃣0️⃣  WORKFLOW COMMANDE #2{Colors.END}")
     
-    api_call('POST', f'/api/commandes/{cmd_id2}/confirm/')
-    api_call('POST', f'/api/commandes/{cmd_id2}/ship/')
-    api_call('POST', f'/api/commandes/{cmd_id2}/deliver/')
+    api_call('POST', f'/api/productions/commandes/{cmd_id2}/confirm/')
+    api_call('POST', f'/api/productions/commandes/{cmd_id2}/ship/')
+    api_call('POST', f'/api/productions/commandes/{cmd_id2}/deliver/')
 
 # ==================== 21. ÉVALUATION COMMANDE 1 ====================
 if cmd_id1:
     print(f"\n{Colors.GREEN}2️⃣1️⃣  ÉVALUATION COMMANDE #1{Colors.END}")
-    api_call('POST', '/api/evaluations/', {
+    api_call('POST', '/api/productions/evaluations/', {
         "commande": cmd_id1,
         "note": 5,
         "commentaire": "Excellente qualité des tomates bio ! Produits frais, bien emballés. Livraison rapide et soignée. Je recommande vivement ce producteur. Meilleur rapport qualité/prix de la région."
@@ -266,7 +266,7 @@ if cmd_id1:
 # ==================== 22. ÉVALUATION COMMANDE 2 ====================
 if cmd_id2:
     print(f"\n{Colors.GREEN}2️⃣2️⃣  ÉVALUATION COMMANDE #2{Colors.END}")
-    api_call('POST', '/api/evaluations/', {
+    api_call('POST', '/api/productions/evaluations/', {
         "commande": cmd_id2,
         "note": 4,
         "commentaire": "Bananes de bonne qualité. Livraison dans les temps. Petit bémol sur l'emballage qui pourrait être amélioré."
